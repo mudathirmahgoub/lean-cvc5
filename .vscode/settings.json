@@ -1,0 +1,7 @@
+{
+  "C_Cpp.default.includePath": [
+    "/home/mudathir/.elan/toolchains/leanprover--lean4---v4.16.0/include",
+    "${workspaceFolder}/.lake/build/cvc5-Linux-x86_64-static/include"
+  ],
+  "C_Cpp.default.cppStandard": "c++17"  
+}

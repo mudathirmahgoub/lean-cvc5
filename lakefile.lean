@@ -111,7 +111,7 @@ target ffi.o pkg : FilePath := do
       "-I", (pkg.buildDir / s!"cvc5-{cvc5.target}" / "include").toString,
       "-fPIC"
     ]
-    buildO oFile srcJob flags
+    buildO oFile srcJob flags (compiler := "clang-15")
 
 def libs := #["cadical", "cvc5", "cvc5parser", "gmp", "gmpxx", "picpoly", "picpolyxx"]
 
@@ -120,3 +120,12 @@ extern_lib libffi pkg := do
   let libs := libs.map (pure <| pkg.buildDir / s!"cvc5-{cvc5.target}" / "lib" / nameToStaticLib ·)
   let libFile := pkg.nativeLibDir / nameToStaticLib "ffi"
   buildStaticLib' libFile (libs.push ffiO)
+
+
+lean_exe «main_executable» {
+  root := `Main
+}
+
+lean_lib SqlToSmt {
+  srcDir := "./"
+}
