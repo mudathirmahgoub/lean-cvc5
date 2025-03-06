@@ -1083,7 +1083,58 @@ extern "C" lean_obj_res termManager_mkSequenceSort(lean_obj_arg tm,
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
   return except_ok(
       lean_box(0),
-      sort_box(new Sort(mut_tm_unbox(tm)->mkSequenceSort(*sort_unbox(sort)))));
+      sort_box(new Sort(mut_tm_unbox(tm)->mkNullableSort(*sort_unbox(sort)))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+extern "C" lean_obj_arg termManager_mkTuple(lean_obj_arg tm, lean_obj_arg terms)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  std::vector<Term> ts;
+  for (size_t i = 0, n = lean_array_size(terms); i < n; ++i)
+  {
+    ts.push_back(*term_unbox(
+        lean_array_get(term_box(new Term()), terms, lean_usize_to_nat(i))));
+  }
+  return except_ok(lean_box(0),
+                   term_box(new Term(mut_tm_unbox(tm)->mkTuple(ts))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+#include <iostream>
+
+extern "C" lean_obj_arg termManager_mkNullableLift(lean_obj_arg tm,
+                                                   uint16_t kind,
+                                                   lean_obj_arg args)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  Kind k = static_cast<Kind>(static_cast<int32_t>(kind) - 2);
+  std::vector<Term> as;
+  for (size_t i = 0, n = lean_array_size(args); i < n; ++i)
+  {
+    as.push_back(*term_unbox(
+        lean_array_get(term_box(new Term()), args, lean_usize_to_nat(i))));
+  }
+  std::cout << "as: " << as << std::endl;
+  std::cout << "k: " << k << std::endl;
+  TermManager tm2;
+  Term t1 = tm2.mkBoolean(true);
+  Term t2 = tm2.mkBoolean(false);
+  std::cout << "line1: " << std::endl;
+  try{
+  tm2.mkNullableLift(k, {t1,t2});
+  }catch(CVC5ApiException & e){
+    std::cout << "e.what(): " << e.what() << std::endl;
+  }
+  std::cout << "line1: " << std::endl;
+  Solver solver(tm2);
+  std::cout << "line2: " << std::endl;
+  Term liftedTerm = tm2.mkNullableLift(k, {t1,t2});
+  liftedTerm = solver.simplify(liftedTerm);
+  std::cout << "liftedTerm: " << liftedTerm << std::endl;
+  liftedTerm = mut_tm_unbox(tm)->mkNullableLift(k, as);
+  return except_ok(lean_box(0),
+                   term_box(new Term(liftedTerm)));
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
 }
 

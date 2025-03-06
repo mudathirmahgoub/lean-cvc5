@@ -766,6 +766,33 @@ extern_def!? mkNullableSort : TermManager → (sort : cvc5.Sort) → Except Erro
 -/
 extern_def mkParamSort : TermManager → (symbol : String) → cvc5.Sort
 
+/-- Create a tuple term.
+- `terms`: The elements in the tuple.
+-/
+extern_def!? mkTuple : TermManager → (terms : Array Term) → Except Error Term
+
+/--
+Create a term that lifts kind to nullable terms.
+
+Example:
+If we have the term `((_ nullable.lift +) x y)`,
+where `x`, `y` of type `(Nullable Int)`, then
+`kind` would be `ADD`, and `args` would be `[x, y]`.
+This function would return
+`(nullable.lift (lambda ((a Int) (b Int)) (+ a b)) x y)`
+
+- `kind`: The lifted operator.
+- `args`: The arguments of the lifted operator.
+- Returns: A term of Kind `NULLABLE_LIFT` where the first child is a lambda
+  expression, and the remaining children are the original arguments.
+-/
+extern_def!? mkNullableLift : TermManager → (kind : Kind) → (args : Array Term) → Except Error Term
+
+/-- Create a tuple sort.
+- `sorts`: The sorts of the elements of the tuple.
+-/
+extern_def!? mkTupleSort : TermManager → (sorts : Array cvc5.Sort) → Except Error cvc5.Sort
+
 /-- Create a Boolean constant.
 
 - `b`: The Boolean constant.
