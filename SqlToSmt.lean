@@ -9,6 +9,7 @@ structure Env where
   tm: TermManager
   s: Solver
   map: HashMap String cvc5.Term
+  semantics : Semantics
 
 def printHashMap (map : HashMap String cvc5.Term) : String :=
   map.fold (fun acc key value =>
@@ -42,7 +43,10 @@ def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
 
 def declareTable (e: Env) (table: Table) : Env :=
   let sorts := table.columns.map (fun c => translateDatatype e c.datatype)
-  let tableSort := e.tm.mkTupleSort! (sorts.filterMap id)
+  let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id)
+  let tableSort := match e.semantics with
+    |.bag => e.tm.mkBagSort! tupleSort
+    |.set => e.tm.mkSetSort! tupleSort
   let tableTerm := e.s.declareFun table.name #[] tableSort
   match tableTerm with
   | none => e
@@ -53,7 +57,7 @@ def declareTable (e: Env) (table: Table) : Env :=
 def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty
+  let e := Env.mk tm s HashMap.empty .bag
   let x := translateDatatype e (.datatype .boolean true)
   let y := tm.mkTupleSort! #[x.get!]
   let tTuple := tm.mkNullableSome! (tm.mkBoolean true)
@@ -90,7 +94,7 @@ instance : Inhabited Table where
 def test2 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty
+  let e := Env.mk tm s HashMap.empty .bag
   let z := declareTable e (schema.tables.getD 0 default)
   return z.map
 

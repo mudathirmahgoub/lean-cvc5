@@ -1087,6 +1087,26 @@ extern "C" lean_obj_res termManager_mkSequenceSort(lean_obj_arg tm,
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
 }
 
+extern "C" lean_obj_arg termManager_mkSetSort(lean_obj_arg tm,
+                                              lean_obj_arg sort)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(
+      lean_box(0),
+      sort_box(new Sort(mut_tm_unbox(tm)->mkSetSort(*sort_unbox(sort)))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+extern "C" lean_obj_arg termManager_mkBagSort(lean_obj_arg tm,
+                                              lean_obj_arg sort)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(
+      lean_box(0),
+      sort_box(new Sort(mut_tm_unbox(tm)->mkBagSort(*sort_unbox(sort)))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
 extern "C" lean_obj_arg termManager_mkTuple(lean_obj_arg tm, lean_obj_arg terms)
 {
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
