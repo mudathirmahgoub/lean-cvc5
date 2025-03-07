@@ -41,12 +41,15 @@ def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
     | some s => e.tm.mkNullableSort? s
 
 
+def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
+  match e.semantics with
+  |.bag => e.tm.mkBagSort! tupleSort
+  |.set => e.tm.mkSetSort! tupleSort
+
 def declareTable (e: Env) (table: Table) : Env :=
   let sorts := table.columns.map (fun c => translateDatatype e c.datatype)
   let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id)
-  let tableSort := match e.semantics with
-    |.bag => e.tm.mkBagSort! tupleSort
-    |.set => e.tm.mkSetSort! tupleSort
+  let tableSort := mkTableSort e tupleSort
   let tableTerm := e.s.declareFun table.name #[] tableSort
   match tableTerm with
   | none => e
@@ -91,11 +94,12 @@ def schema : DatabaseSchema :=
 instance : Inhabited Table where
   default := { name := "", columns := #[] }
 
-def test2 := do
+def test2 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty .bag
+  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
   let z := declareTable e (schema.tables.getD 0 default)
   return z.map
 
-#eval test2
+#eval test2 true
+#eval test2 false
