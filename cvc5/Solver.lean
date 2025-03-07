@@ -772,6 +772,22 @@ extern_def mkParamSort : TermManager → (symbol : String) → cvc5.Sort
 extern_def!? mkTuple : TermManager → (terms : Array Term) → Except Error Term
 
 /--
+Create a nullable some term.
+
+- `term`: The element value.
+- Returns: The element value wrapped in some constructor.
+-/
+extern_def!? mkNullableSome : TermManager → (term : Term) → Except Error Term
+
+/--
+Create a null tester for a nullable term.
+
+- `term`: A nullable term.
+- Returns: A tester whether term is null.
+-/
+extern_def!? mkNullableIsNull : TermManager → (term : Term) → Except Error Term
+
+/--
 Create a term that lifts kind to nullable terms.
 
 Example:
@@ -892,7 +908,7 @@ Constructs solver instance from a given term manager instance.
 
 - `tm`: The associated term manager.
 -/
-private extern_def new : TermManager → Solver
+extern_def new : TermManager → Solver
 
 /-- Get a string representation of the version of this solver. -/
 extern_def getVersion : SolverT m String

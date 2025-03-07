@@ -4,6 +4,7 @@
 
 -- Abdo: should this be an inductive or a structure?
 --       consider using `PlainDateTime`. Though, it's more precise (includes nanoseconds)
+
 inductive TimePart where
   | Year
   | Month
@@ -11,6 +12,7 @@ inductive TimePart where
   | Hour
   | Minute
   | Second
+  deriving Repr
 
 inductive Basetype where
   | bigint
@@ -21,7 +23,7 @@ inductive Basetype where
   | box
   | bytea
   | character (size: Nat)
-  | characterVarying (size: Nat)
+  | varchar (size: Nat)
   | cidr
   | circle
   | date
@@ -56,6 +58,31 @@ inductive Basetype where
   | txid_snapshot
   | uuid
   | xml
+  deriving Repr
 
 inductive Datatype where
   | datatype (basetype : Basetype) (isNull : Bool)
+  deriving Repr
+
+
+structure Column where
+  name : String
+  datatype : Datatype
+  deriving Repr
+
+structure Table where
+  name : String
+  columns : Array Column
+  deriving Repr
+
+structure DatabaseSchema where
+  tables : Array Table
+  deriving Repr
+
+def DatabaseSchema.getTable? (schema : DatabaseSchema) (tableName : String) : Option Table :=
+  schema.tables.find? (fun t => t.name == tableName)
+
+
+inductive Semantics where
+  | bag : Semantics
+  | set : Semantics
