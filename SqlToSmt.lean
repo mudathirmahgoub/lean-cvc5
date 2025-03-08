@@ -64,6 +64,13 @@ def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
 def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
   | .baseTable name => e.map[name]?
+  | .tableOperation op l r =>
+    let l' := translateTableExpr e l
+    let r' := translateTableExpr e r
+    match op with
+    | .union => e.tm.mkTerm! .BAG_UNION_MAX  #[l'.get!, r'.get!]
+    | .unionAll => e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!]
+    | _ => none
   | _ => none
 
 def test1 := do
@@ -118,7 +125,8 @@ def test3 (isBag : Bool) := do
   let s := (Solver.new tm)
   let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let w := translateTableExpr z (.baseTable ("users"))
+  let t : TableExpr := .tableOperation .unionAll  (.baseTable "users") (.baseTable "users")
+  let w := translateTableExpr z t
   return w
 
 #eval test3 true

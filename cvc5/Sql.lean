@@ -114,5 +114,5 @@ inductive TableExpr where
   | project (expr: ScalarExpr) (query: TableExpr) : TableExpr
   | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
   | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
-  | union (op: TableOp) (query: TableExpr) (condition: ScalarExpr) : TableExpr
+  | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
   | values (rows: Array RowExpr) : TableExpr
