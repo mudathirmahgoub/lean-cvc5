@@ -57,6 +57,15 @@ def declareTable (e: Env) (table: Table) : Env :=
     | .error _ => e
     | .ok t => { e with map := e.map.insert table.name t }
 
+def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
+  d.tables.foldl declareTable e
+
+
+def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
+  match tableExpr with
+  | .baseTable name => e.map[name]?
+  | _ => none
+
 def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
@@ -69,7 +78,6 @@ def test1 := do
   let lift := tm.mkNullableLift k #[tTuple,fTuple]
   return lift
 
-#eval test1
 
 def schema : DatabaseSchema :=
   { tables := #[
@@ -82,9 +90,9 @@ def schema : DatabaseSchema :=
       },
       { name := "posts", columns := #[
           { name := "id", datatype := Datatype.datatype Basetype.integer false },
-          { name := "user_id", datatype := Datatype.datatype Basetype.integer false },
-          { name := "title", datatype := Datatype.datatype Basetype.text false },
-          { name := "content", datatype := Datatype.datatype Basetype.text true },
+          { name := "user_id", datatype := Datatype.datatype Basetype.integer true },
+          { name := "title", datatype := Datatype.datatype (Basetype.varchar 10) false },
+          { name := "content", datatype := Datatype.datatype (Basetype.varchar 20) true },
           { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) false }
         ]
       }
@@ -98,8 +106,20 @@ def test2 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
-  let z := declareTable e (schema.tables.getD 0 default)
+  let z := translateSchema e schema
   return z.map
 
 #eval test2 true
 #eval test2 false
+
+
+def test3 (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let w := translateTableExpr z (.baseTable ("users"))
+  return w
+
+#eval test3 true
+#eval test3 false

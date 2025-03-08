@@ -53,7 +53,7 @@ inductive Basetype where
   | timeWithTimeZone (precision : Nat)
   | timestampWithoutTimeZone (precision : Nat)
   | timestampWithTimeZone (precision : Nat)
-  | tsquery
+  | tsTableExpr
   | tsvector
   | txid_snapshot
   | uuid
@@ -86,3 +86,33 @@ def DatabaseSchema.getTable? (schema : DatabaseSchema) (tableName : String) : Op
 inductive Semantics where
   | bag : Semantics
   | set : Semantics
+
+
+inductive ScalarExpr : Type where
+  | column (name : String) : ScalarExpr
+  | stringLiteral (value : String) : ScalarExpr
+  | intLiteral (value : Int) : ScalarExpr
+  | boolLiteral (value : Bool) : ScalarExpr
+  | application (function : String) (args : Array ScalarExpr) : ScalarExpr
+  | exists (tableExpr : TableExpr) : ScalarExpr
+  deriving Repr
+
+inductive RowExpr : Type where
+  | row (elements : Array ScalarExpr) : RowExpr
+  deriving Repr
+
+inductive TableOp where
+  | union
+  | unionAll
+  | intersect
+  | minus
+  | minusAll
+  deriving Repr
+
+inductive TableExpr where
+  | baseTable (name : String) : TableExpr
+  | project (expr: ScalarExpr) (query: TableExpr) : TableExpr
+  | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
+  | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
+  | union (op: TableOp) (query: TableExpr) (condition: ScalarExpr) : TableExpr
+  | values (rows: Array RowExpr) : TableExpr
