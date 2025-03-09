@@ -60,25 +60,30 @@ def declareTable (e: Env) (table: Table) : Env :=
 def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
   d.tables.foldl declareTable e
 
-
-def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
+mutual
+partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
   | .baseTable name => e.map[name]?
-  | .tableOperation op l r =>
-    let l' := translateTableExpr e l
-    let r' := translateTableExpr e r
-    match op, e.semantics with
-    | .union, .bag => e.tm.mkTerm! .BAG_UNION_MAX  #[l'.get!, r'.get!]
-    | .unionAll,.bag => e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!]
-    | .union, .set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
-    | .unionAll,.set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
-    | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_REMOVE  #[l'.get!, r'.get!]
-    | .minusAll,.bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[l'.get!, r'.get!]
-    | .minus, .set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
-    | .minusAll,.set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
-    | .intersect,.bag => e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!]
-    | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
+  | .tableOperation op l r => translateTableOperation e op l r
   | _ => none
+
+
+partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
+  let l' := translateTableExpr e l
+  let r' := translateTableExpr e r
+  match op, e.semantics with
+  | .union, .bag => e.tm.mkTerm! .BAG_UNION_MAX  #[l'.get!, r'.get!]
+  | .unionAll,.bag => e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!]
+  | .union, .set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
+  | .unionAll,.set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
+  | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_REMOVE  #[l'.get!, r'.get!]
+  | .minusAll,.bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[l'.get!, r'.get!]
+  | .minus, .set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
+  | .minusAll,.set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
+  | .intersect,.bag => e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!]
+  | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
+
+end
 
 def test1 := do
   let tm ← TermManager.new
