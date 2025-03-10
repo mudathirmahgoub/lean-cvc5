@@ -65,6 +65,11 @@ def isIntegerOrNullableInteger (t: cvc5.Term) : Bool :=
   t.getSort.isInteger ||
   (t.getSort.isNullable && t.getSort.getNullableElementSort!.isInteger)
 
+
+def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: Array cvc5.Term) : cvc5.Term :=
+  if needsLifting then e.tm.mkNullableLift! k terms
+  else e.tm.mkTerm! k terms
+
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
@@ -101,30 +106,30 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   | .exists tableExpr => translateTableExpr e tableExpr
   | .application op args =>
     let terms := ((args.map (traslateScalarExpr e)).filterMap id)
-    let any := terms.any (fun t => t.getSort.isNullable)
+    let needsLifting := terms.any (fun t => t.getSort.isNullable)
     let nullableTerms := if any
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
       else terms
     match op with
     | "=" => e.tm.mkTerm! .EQUAL terms
     | "<>" => e.tm.mkTerm! .DISTINCT terms
-    | "+" => e.tm.mkTerm! .ADD nullableTerms
-    | "-" => e.tm.mkTerm! .SUB nullableTerms
-    | "*" => e.tm.mkTerm! .DIVISION nullableTerms
+    | "+" => liftIfNullable e needsLifting .ADD nullableTerms
+    | "-" => liftIfNullable e needsLifting .SUB nullableTerms
+    | "*" => liftIfNullable e needsLifting .DIVISION nullableTerms
     | ">" => if isIntegerOrNullableInteger nullableTerms[0]!
-             then e.tm.mkTerm! .GT nullableTerms
-             else e.tm.mkTerm! .STRING_LT #[nullableTerms[1]!, nullableTerms[0]!]
+             then liftIfNullable e needsLifting .GT nullableTerms
+             else liftIfNullable e needsLifting .STRING_LT #[nullableTerms[1]!, nullableTerms[0]!]
     | "<" => if isIntegerOrNullableInteger nullableTerms[0]!
-             then e.tm.mkTerm! .LT nullableTerms
-             else e.tm.mkTerm! .STRING_LT nullableTerms
+             then liftIfNullable e needsLifting .LT nullableTerms
+             else liftIfNullable e needsLifting .STRING_LT nullableTerms
     | ">=" => if isIntegerOrNullableInteger nullableTerms[0]!
-              then e.tm.mkTerm! .GEQ nullableTerms
-              else e.tm.mkTerm! .STRING_LEQ #[nullableTerms[1]!, nullableTerms[0]!]
+              then liftIfNullable e needsLifting .GEQ nullableTerms
+              else liftIfNullable e needsLifting .STRING_LEQ #[nullableTerms[1]!, nullableTerms[0]!]
     | "<=" => if isIntegerOrNullableInteger nullableTerms[0]!
-              then e.tm.mkTerm! .LEQ nullableTerms
-              else e.tm.mkTerm! .STRING_LEQ nullableTerms
-    | "UPPER" => e.tm.mkTerm! .STRING_TO_UPPER nullableTerms
-    | "||" => e.tm.mkTerm! .STRING_CONCAT nullableTerms
+              then liftIfNullable e needsLifting .LEQ nullableTerms
+              else liftIfNullable e needsLifting .STRING_LEQ nullableTerms
+    | "UPPER" => liftIfNullable e needsLifting .STRING_TO_UPPER nullableTerms
+    | "||" => liftIfNullable e needsLifting .STRING_CONCAT nullableTerms
     | _ => none
   | _ => none
 
