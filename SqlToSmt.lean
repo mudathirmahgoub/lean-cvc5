@@ -106,6 +106,24 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | "+" => e.tm.mkTerm! .ADD nullableTerms
     | "-" => e.tm.mkTerm! .SUB nullableTerms
     | "*" => e.tm.mkTerm! .DIVISION nullableTerms
+    | ">" => if nullableTerms[0]!.getSort.isInteger || (nullableTerms[0]!.getSort.isNullable &&
+         nullableTerms[0]!.getSort.getNullableElementSort!.isInteger)
+         then e.tm.mkTerm! .GT nullableTerms
+         else e.tm.mkTerm! .STRING_LT #[nullableTerms[1]!, nullableTerms[0]!]
+    | "<" => if nullableTerms[0]!.getSort.isInteger || (nullableTerms[0]!.getSort.isNullable &&
+         nullableTerms[0]!.getSort.getNullableElementSort!.isInteger)
+         then e.tm.mkTerm! .LT nullableTerms
+         else e.tm.mkTerm! .STRING_LT nullableTerms
+    | ">=" => if nullableTerms[0]!.getSort.isInteger || (nullableTerms[0]!.getSort.isNullable &&
+         nullableTerms[0]!.getSort.getNullableElementSort!.isInteger)
+         then e.tm.mkTerm! .GEQ nullableTerms
+         else e.tm.mkTerm! .STRING_LEQ #[nullableTerms[1]!, nullableTerms[0]!]
+    | "<=" => if nullableTerms[0]!.getSort.isInteger || (nullableTerms[0]!.getSort.isNullable &&
+         nullableTerms[0]!.getSort.getNullableElementSort!.isInteger)
+         then e.tm.mkTerm! .LEQ nullableTerms
+         else e.tm.mkTerm! .STRING_LEQ nullableTerms
+    | "UPPER" => e.tm.mkTerm! .STRING_TO_UPPER nullableTerms
+    | "||" => e.tm.mkTerm! .STRING_CONCAT nullableTerms
     | _ => none
   | _ => none
 
