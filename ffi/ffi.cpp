@@ -383,6 +383,11 @@ extern "C" lean_obj_res sort_getFunctionArity(lean_obj_arg s)
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
 }
 
+extern "C" uint8_t sort_isNullable(lean_obj_arg s)
+{
+  return bool_box(sort_unbox(s)->isNullable());
+}
+
 extern "C" lean_obj_res sort_getFunctionDomainSorts(lean_obj_arg s)
 {
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;

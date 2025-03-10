@@ -309,6 +309,9 @@ arguments --- see also `cvc5.Sort.instantiate`.
 -/
 extern_def isInstantiated : cvc5.Sort → Bool
 
+/-- Determine if this is a nullable sort. -/
+protected extern_def isNullable : cvc5.Sort → Bool
+
 /-- A string representation of this sort. -/
 protected extern_def toString : cvc5.Sort → String
 

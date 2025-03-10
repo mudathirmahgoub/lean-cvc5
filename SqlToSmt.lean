@@ -72,18 +72,42 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   let l' := translateTableExpr e l
   let r' := translateTableExpr e r
   match op, e.semantics with
-  | .union, .bag => e.tm.mkTerm! .BAG_UNION_MAX  #[l'.get!, r'.get!]
+  | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!])]
   | .unionAll,.bag => e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!]
   | .union, .set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
   | .unionAll,.set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
-  | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_REMOVE  #[l'.get!, r'.get!]
+  | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[e.tm.mkTerm! .BAG_SETOF #[l'.get!], r'.get!]
   | .minusAll,.bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[l'.get!, r'.get!]
   | .minus, .set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
   | .minusAll,.set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
-  | .intersect,.bag => e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!]
+  | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!])]
+  | .intersectAll, .bag => e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!]
   | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
+  | .intersectAll, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
 
 end
+
+partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
+  match s with
+  | .column name => e.map[name]?
+  --| .stringLiteral v => e.tm.mkString v
+  | .intLiteral v => e.tm.mkInteger v
+  | .boolLiteral v => e.tm.mkBoolean v
+  | .exists tableExpr => translateTableExpr e tableExpr
+  | .application op args =>
+    let terms := ((args.map (traslateScalarExpr e)).filterMap id)
+    let any := terms.any (fun t => t.getSort.isNullable)
+    let nullableTerms := if any
+      then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
+      else terms
+    match op with
+    | "=" => e.tm.mkTerm! .EQUAL terms
+    | "<>" => e.tm.mkTerm! .DISTINCT terms
+    | "+" => e.tm.mkTerm! .ADD nullableTerms
+    | "-" => e.tm.mkTerm! .SUB nullableTerms
+    | "*" => e.tm.mkTerm! .DIVISION nullableTerms
+    | _ => none
+  | _ => none
 
 def test1 := do
   let tm ← TermManager.new

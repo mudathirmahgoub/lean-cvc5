@@ -88,27 +88,16 @@ inductive Semantics where
   | set : Semantics
 
 
-inductive ScalarExpr : Type where
-  | column (name : String) : ScalarExpr
-  | stringLiteral (value : String) : ScalarExpr
-  | intLiteral (value : Int) : ScalarExpr
-  | boolLiteral (value : Bool) : ScalarExpr
-  | application (function : String) (args : Array ScalarExpr) : ScalarExpr
-  | exists (tableExpr : TableExpr) : ScalarExpr
-  deriving Repr
-
-inductive RowExpr : Type where
-  | row (elements : Array ScalarExpr) : RowExpr
-  deriving Repr
-
 inductive TableOp where
   | union
   | unionAll
   | intersect
+  | intersectAll
   | minus
   | minusAll
   deriving Repr
 
+mutual
 inductive TableExpr where
   | baseTable (name : String) : TableExpr
   | project (expr: ScalarExpr) (query: TableExpr) : TableExpr
@@ -116,3 +105,17 @@ inductive TableExpr where
   | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
   | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
   | values (rows: Array RowExpr) : TableExpr
+
+inductive ScalarExpr : Type where
+  | column (name : String) : ScalarExpr
+  | stringLiteral (value : String) : ScalarExpr
+  | intLiteral (value : Int) : ScalarExpr
+  | boolLiteral (value : Bool) : ScalarExpr
+  | exists (tableExpr : TableExpr) : ScalarExpr
+  | application (function : String) (args : Array ScalarExpr) : ScalarExpr
+  deriving Repr
+
+inductive RowExpr : Type where
+  | row (elements : Array ScalarExpr) : RowExpr
+  deriving Repr
+end
