@@ -107,7 +107,7 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   | .application op args =>
     let terms := ((args.map (traslateScalarExpr e)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
-    let nullableTerms := if any
+    let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
       else terms
     match op with
