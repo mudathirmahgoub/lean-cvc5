@@ -1146,6 +1146,26 @@ extern "C" lean_obj_arg termManager_mkNullableSome(lean_obj_arg tm,
   CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
 }
 
+extern "C" lean_obj_arg termManager_mkNullableIsSome(lean_obj_arg tm,
+                                                     lean_obj_arg term)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(lean_box(0),
+                   term_box(new Term(
+                       mut_tm_unbox(tm)->mkNullableIsSome(*term_unbox(term)))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+extern "C" lean_obj_arg termManager_mkNullableIsNull(lean_obj_arg tm,
+                                                     lean_obj_arg term)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(lean_box(0),
+                   term_box(new Term(
+                       mut_tm_unbox(tm)->mkNullableIsNull(*term_unbox(term)))));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
 extern "C" lean_obj_arg termManager_mkNullableLift(lean_obj_arg tm,
                                                    uint16_t kind,
                                                    lean_obj_arg args)

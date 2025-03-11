@@ -130,6 +130,12 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
               else liftIfNullable e needsLifting .STRING_LEQ nullableTerms
     | "UPPER" => liftIfNullable e needsLifting .STRING_TO_UPPER nullableTerms
     | "||" => liftIfNullable e needsLifting .STRING_CONCAT nullableTerms
+    | "IS NULL" => if needsLifting
+                   then e.tm.mkNullableIsNull! nullableTerms[0]!
+                   else e.tm.mkBoolean false
+    | "IS NOT NULL" => if needsLifting
+                   then e.tm.mkNullableIsSome! nullableTerms[0]!
+                   else e.tm.mkBoolean true
     | _ => none
   | _ => none
 

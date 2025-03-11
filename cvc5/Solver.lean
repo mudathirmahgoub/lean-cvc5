@@ -783,6 +783,12 @@ Create a nullable some term.
 extern_def!? mkNullableSome : TermManager → (term : Term) → Except Error Term
 
 /--
+ - Create a some tester for a nullable term.
+ - @param term A nullable term.
+-/
+extern_def!? mkNullableIsSome : TermManager → (term : Term) → Except Error Term
+
+/--
 Create a null tester for a nullable term.
 
 - `term`: A nullable term.
