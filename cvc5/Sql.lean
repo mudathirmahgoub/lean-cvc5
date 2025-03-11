@@ -111,6 +111,7 @@ inductive ScalarExpr : Type where
   | stringLiteral (value : String) : ScalarExpr
   | intLiteral (value : Int) : ScalarExpr
   | boolLiteral (value : Bool) : ScalarExpr
+  | nullLiteral (type : Basetype) : ScalarExpr
   | exists (tableExpr : TableExpr) : ScalarExpr
   | application (function : String) (args : Array ScalarExpr) : ScalarExpr
   deriving Repr

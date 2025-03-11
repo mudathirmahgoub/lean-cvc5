@@ -783,6 +783,20 @@ Create a nullable some term.
 extern_def!? mkNullableSome : TermManager → (term : Term) → Except Error Term
 
 /--
+  - Create a constant representing an null of the given sort.
+  - `sort` The sort of the Nullable element.
+  - Returns: The null constant.
+  -/
+extern_def!? mkNullableNull : TermManager → (sort : cvc5.Sort) → Except Error Term
+
+/--
+ Create a selector for nullable term.
+ - `term`: A nullable term.
+ - Returns: The element value of the nullable term.
+ -/
+extern_def!? mkNullableVal : TermManager → (term : Term) → Except Error Term
+
+/--
  - Create a some tester for a nullable term.
  - @param term A nullable term.
 -/

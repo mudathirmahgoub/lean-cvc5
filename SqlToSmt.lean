@@ -70,6 +70,36 @@ def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: Array cv
   if needsLifting then e.tm.mkNullableLift! k terms
   else e.tm.mkTerm! k terms
 
+
+def translateAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+  if needsLifting then
+  let falseTerm := e.tm.mkBoolean false
+  let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
+  let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
+  let fstVal := e.tm.mkNullableVal! terms[0]!
+  let sndVal := e.tm.mkNullableVal! terms[1]!
+  let fstValFalse := e.tm.mkTerm! .NOT #[fstVal]
+  let sndValFalse := e.tm.mkTerm! .NOT #[sndVal]
+  let isFirstFalse := e.tm.mkTerm! .AND #[fstIsSome, fstValFalse]
+  let isSecondFalse := e.tm.mkTerm! .AND #[sndIsSome, sndValFalse]
+  e.tm.mkTerm! .ITE #[isFirstFalse, falseTerm,
+                      e.tm.mkTerm! .ITE #[isSecondFalse, falseTerm, e.tm.mkNullableLift! .AND terms]]
+  else e.tm.mkTerm! .AND terms
+
+
+def translateOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+  if needsLifting then
+  let trueTerm := e.tm.mkBoolean true
+  let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
+  let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
+  let fstVal := e.tm.mkNullableVal! terms[0]!
+  let sndVal := e.tm.mkNullableVal! terms[1]!
+  let isFirstTrue := e.tm.mkTerm! .AND #[fstIsSome, fstVal]
+  let isSecondTrue := e.tm.mkTerm! .AND #[sndIsSome, sndVal]
+  e.tm.mkTerm! .ITE #[isFirstTrue, trueTerm,
+                      e.tm.mkTerm! .ITE #[isSecondTrue, trueTerm, e.tm.mkNullableLift! .OR terms]]
+  else e.tm.mkTerm! .OR terms
+
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
@@ -103,6 +133,12 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   --| .stringLiteral v => e.tm.mkString v
   | .intLiteral v => e.tm.mkInteger v
   | .boolLiteral v => e.tm.mkBoolean v
+  | .nullLiteral b => match b with
+    | .bigint => e.tm.mkNullableNull! e.tm.getIntegerSort
+    | .integer => e.tm.mkNullableNull! e.tm.getIntegerSort
+    | .boolean => e.tm.mkNullableNull! e.tm.getBooleanSort
+    | .varchar _ => e.tm.mkNullableNull! e.tm.getStringSort
+    | _ => none
   | .exists tableExpr => translateTableExpr e tableExpr
   | .application op args =>
     let terms := ((args.map (traslateScalarExpr e)).filterMap id)
@@ -136,6 +172,15 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | "IS NOT NULL" => if needsLifting
                    then e.tm.mkNullableIsSome! nullableTerms[0]!
                    else e.tm.mkBoolean true
+    | "IS TRUE" => if needsLifting
+                   then e.tm.mkNullableVal! nullableTerms[0]!
+                   else nullableTerms[0]!
+    | "IS NOT TRUE" => if needsLifting
+                   then e.tm.mkTerm! .NOT #[(e.tm.mkNullableVal! nullableTerms[0]!)]
+                   else e.tm.mkTerm! .NOT #[nullableTerms[0]!]
+    | "NOT" => liftIfNullable e needsLifting .NOT nullableTerms
+    | "AND" => translateAnd e needsLifting nullableTerms
+    | "OR" => translateOr e needsLifting nullableTerms
     | _ => none
   | _ => none
 
@@ -197,3 +242,17 @@ def test3 (isBag : Bool) := do
 
 #eval test3 true
 #eval test3 false
+
+
+def test4 := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let e := Env.mk tm s HashMap.empty .bag
+  let nullLiteral := ScalarExpr.nullLiteral .boolean
+  let x := ScalarExpr.boolLiteral true
+  let andExpr := ScalarExpr.application "AND" #[nullLiteral, x]
+  let z := traslateScalarExpr e andExpr
+  return z
+
+
+#eval test4
