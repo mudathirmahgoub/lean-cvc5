@@ -73,32 +73,34 @@ def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: Array cv
 
 def translateAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
   if needsLifting then
-  let falseTerm := e.tm.mkBoolean false
-  let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
-  let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
-  let fstVal := e.tm.mkNullableVal! terms[0]!
-  let sndVal := e.tm.mkNullableVal! terms[1]!
-  let fstValFalse := e.tm.mkTerm! .NOT #[fstVal]
-  let sndValFalse := e.tm.mkTerm! .NOT #[sndVal]
-  let isFirstFalse := e.tm.mkTerm! .AND #[fstIsSome, fstValFalse]
-  let isSecondFalse := e.tm.mkTerm! .AND #[sndIsSome, sndValFalse]
-  e.tm.mkTerm! .ITE #[isFirstFalse, falseTerm,
-                      e.tm.mkTerm! .ITE #[isSecondFalse, falseTerm, e.tm.mkNullableLift! .AND terms]]
-  else e.tm.mkTerm! .AND terms
+    let falseTerm := e.tm.mkNullableSome! (e.tm.mkBoolean false)
+    let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
+    let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
+    let fstVal := e.tm.mkNullableVal! terms[0]!
+    let sndVal := e.tm.mkNullableVal! terms[1]!
+    let fstValFalse := e.tm.mkTerm! .NOT #[fstVal]
+    let sndValFalse := e.tm.mkTerm! .NOT #[sndVal]
+    let isFirstFalse := e.tm.mkTerm! .AND #[fstIsSome, fstValFalse]
+    let isSecondFalse := e.tm.mkTerm! .AND #[sndIsSome, sndValFalse]
+    e.tm.mkTerm! .ITE #[isFirstFalse, falseTerm,
+                        e.tm.mkTerm! .ITE #[isSecondFalse, falseTerm, e.tm.mkNullableLift! .AND terms]]
+  else
+    e.tm.mkTerm! .AND terms
 
 
 def translateOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
   if needsLifting then
-  let trueTerm := e.tm.mkBoolean true
-  let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
-  let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
-  let fstVal := e.tm.mkNullableVal! terms[0]!
-  let sndVal := e.tm.mkNullableVal! terms[1]!
-  let isFirstTrue := e.tm.mkTerm! .AND #[fstIsSome, fstVal]
-  let isSecondTrue := e.tm.mkTerm! .AND #[sndIsSome, sndVal]
-  e.tm.mkTerm! .ITE #[isFirstTrue, trueTerm,
-                      e.tm.mkTerm! .ITE #[isSecondTrue, trueTerm, e.tm.mkNullableLift! .OR terms]]
-  else e.tm.mkTerm! .OR terms
+    let trueTerm := e.tm.mkNullableSome! (e.tm.mkBoolean true)
+    let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
+    let sndIsSome := e.tm.mkNullableIsSome! terms[1]!
+    let fstVal := e.tm.mkNullableVal! terms[0]!
+    let sndVal := e.tm.mkNullableVal! terms[1]!
+    let isFirstTrue := e.tm.mkTerm! .AND #[fstIsSome, fstVal]
+    let isSecondTrue := e.tm.mkTerm! .AND #[sndIsSome, sndVal]
+    e.tm.mkTerm! .ITE #[isFirstTrue, trueTerm,
+                        e.tm.mkTerm! .ITE #[isSecondTrue, trueTerm, e.tm.mkNullableLift! .OR terms]]
+  else
+    e.tm.mkTerm! .OR terms
 
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
@@ -134,10 +136,10 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   | .intLiteral v => e.tm.mkInteger v
   | .boolLiteral v => e.tm.mkBoolean v
   | .nullLiteral b => match b with
-    | .bigint => e.tm.mkNullableNull! e.tm.getIntegerSort
-    | .integer => e.tm.mkNullableNull! e.tm.getIntegerSort
-    | .boolean => e.tm.mkNullableNull! e.tm.getBooleanSort
-    | .varchar _ => e.tm.mkNullableNull! e.tm.getStringSort
+    | .bigint => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getIntegerSort)
+    | .integer => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getIntegerSort)
+    | .boolean => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
+    | .varchar _ => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
     | _ => none
   | .exists tableExpr => translateTableExpr e tableExpr
   | .application op args =>
@@ -151,7 +153,7 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | "<>" => e.tm.mkTerm! .DISTINCT terms
     | "+" => liftIfNullable e needsLifting .ADD nullableTerms
     | "-" => liftIfNullable e needsLifting .SUB nullableTerms
-    | "*" => liftIfNullable e needsLifting .DIVISION nullableTerms
+    | "*" => liftIfNullable e needsLifting .MULT nullableTerms
     | ">" => if isIntegerOrNullableInteger nullableTerms[0]!
              then liftIfNullable e needsLifting .GT nullableTerms
              else liftIfNullable e needsLifting .STRING_LT #[nullableTerms[1]!, nullableTerms[0]!]
