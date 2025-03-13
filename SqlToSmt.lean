@@ -246,14 +246,14 @@ def test3 (isBag : Bool) := do
 #eval test3 false
 
 
-def test4 (simplify: Bool) := do
+def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
   let nullLiteral := ScalarExpr.nullLiteral .boolean
-  let x := ScalarExpr.boolLiteral true
-  let andExpr := ScalarExpr.application "AND" #[nullLiteral, x]
+  let x := ScalarExpr.boolLiteral value
+  let andExpr := ScalarExpr.application op #[nullLiteral, x]
   let z : Option cvc5.Term := traslateScalarExpr e andExpr
   let z' := z.get!
   if simplify then
@@ -264,5 +264,12 @@ def test4 (simplify: Bool) := do
 
 
 
-#eval test4 true
-#eval test4 false
+#eval test4 true true "AND"
+#eval test4 false true "AND"
+#eval test4 true true "OR"
+#eval test4 false true "OR"
+
+#eval test4 true false "AND"
+#eval test4 false false "AND"
+#eval test4 true false "OR"
+#eval test4 false false "OR"
