@@ -102,13 +102,14 @@ def translateOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Te
   else
     e.tm.mkTerm! .OR terms
 
+
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
   | .baseTable name => e.map[name]?
+  | .project expr query => translateProject e expr query
   | .tableOperation op l r => translateTableOperation e op l r
   | _ => none
-
 
 partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l
@@ -127,7 +128,13 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
   | .intersectAll, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
 
-end
+partial def translateProject (e: Env) (expr: ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
+  let query' := translateTableExpr e query
+  let expr' := traslateScalarExpr e expr
+  match query', expr' with
+  | some query, some expr => sorry
+  | _, _ => none
+
 
 partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   match s with
@@ -185,6 +192,9 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | "OR" => translateOr e needsLifting nullableTerms
     | _ => none
   | _ => none
+
+
+end
 
 def test1 := do
   let tm ← TermManager.new
