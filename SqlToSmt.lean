@@ -133,15 +133,15 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
   let isTableProject := exprs.any (fun x => match x with
     | .column _ => true
     | _ => false)
-  let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => traslateScalarExpr e x)
+  let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => translateScalarExpr e x)
   let exprs'' := (exprs'.filterMap id)
   if isTableProject then  e.tm.mkTerm! .TABLE_PROJECT exprs''
   else match e.semantics with
   | .set => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
-  | .bag => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
+  | .bag => e.tm.mkTerm! .SET_MAP (exprs''.push query'.get!)
 
 
-partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
+partial def translateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   match s with
   | .column name => e.map[name]?
   --| .stringLiteral v => e.tm.mkString v
@@ -155,7 +155,7 @@ partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | _ => none
   | .exists tableExpr => translateTableExpr e tableExpr
   | .application op args =>
-    let terms := ((args.map (traslateScalarExpr e)).filterMap id)
+    let terms := ((args.map (translateScalarExpr e)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
     let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
@@ -269,7 +269,7 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let nullLiteral := ScalarExpr.nullLiteral .boolean
   let x := ScalarExpr.boolLiteral value
   let andExpr := ScalarExpr.application op #[nullLiteral, x]
-  let z : Option cvc5.Term := traslateScalarExpr e andExpr
+  let z : Option cvc5.Term := translateScalarExpr e andExpr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -297,7 +297,7 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   let e := Env.mk tm s2.snd HashMap.empty .bag
   let x := ScalarExpr.boolLiteral value
   let expr := ScalarExpr.application op #[x]
-  let z : Option cvc5.Term := traslateScalarExpr e expr
+  let z : Option cvc5.Term := translateScalarExpr e expr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
