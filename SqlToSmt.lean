@@ -107,7 +107,7 @@ mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
   | .baseTable name => e.map[name]?
-  | .project expr query => translateProject e expr query
+  | .project exprs query => translateProject e exprs query
   | .tableOperation op l r => translateTableOperation e op l r
   | _ => none
 
@@ -128,12 +128,17 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
   | .intersectAll, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
 
-partial def translateProject (e: Env) (expr: ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
+partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query
-  let expr' := traslateScalarExpr e expr
-  match query', expr' with
-  | some query, some expr => sorry
-  | _, _ => none
+  let isTableProject := exprs.any (fun x => match x with
+    | .column _ => true
+    | _ => false)
+  let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => traslateScalarExpr e x)
+  let exprs'' := (exprs'.filterMap id)
+  if isTableProject then  e.tm.mkTerm! .TABLE_PROJECT exprs''
+  else match e.semantics with
+  | .set => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
+  | .bag => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
 
 
 partial def traslateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=

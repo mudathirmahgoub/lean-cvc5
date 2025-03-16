@@ -100,7 +100,7 @@ inductive TableOp where
 mutual
 inductive TableExpr where
   | baseTable (name : String) : TableExpr
-  | project (expr: ScalarExpr) (query: TableExpr) : TableExpr
+  | project (expr: Array ScalarExpr) (query: TableExpr) : TableExpr
   | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
   | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
   | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
