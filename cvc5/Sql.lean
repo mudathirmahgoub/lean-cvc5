@@ -107,7 +107,7 @@ inductive TableExpr where
   | values (rows: Array RowExpr) : TableExpr
 
 inductive ScalarExpr : Type where
-  | column (name : String) : ScalarExpr
+  | column (index : Nat) : ScalarExpr
   | stringLiteral (value : String) : ScalarExpr
   | intLiteral (value : Int) : ScalarExpr
   | boolLiteral (value : Bool) : ScalarExpr

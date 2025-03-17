@@ -41,6 +41,12 @@ def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
     | some s => e.tm.mkNullableSort? s
 
 
+def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=
+  let datatype := tupleSort.getDatatype
+  let constructor := datatype.getConstructor 0
+  let selectorTerm := constructor.getSelector index |>.getTerm
+  e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
+
 def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   match e.semantics with
   |.bag => e.tm.mkBagSort! tupleSort
@@ -153,7 +159,9 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
     | _ => false)
   let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => translateScalarExpr e x)
   let exprs'' := (exprs'.filterMap id)
-  if isTableProject then  e.tm.mkTerm! .TABLE_PROJECT exprs''
+  if isTableProject then
+  let indices := 5
+  e.tm.mkTerm! .TABLE_PROJECT exprs''
   else
   let t := e.tm.mkVar e.tm.getBooleanSort "s"
   match e.semantics with
@@ -163,7 +171,7 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
 
 partial def translateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
   match s with
-  | .column name => e.map[name]?
+  | .column _ => none
   --| .stringLiteral v => e.tm.mkString v
   | .intLiteral v => e.tm.mkInteger v
   | .boolLiteral v => e.tm.mkBoolean v
