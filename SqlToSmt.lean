@@ -103,6 +103,24 @@ def translateOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Te
     e.tm.mkTerm! .OR terms
 
 
+def defineFun (e: Env) : cvc5.Term :=
+  let x := e.tm.mkVar e.tm.getIntegerSort "x"
+  let one := e.tm.mkInteger 1
+  let xPlus1 := e.tm.mkTerm! .ADD #[x.toOption.get!, one]
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[x.toOption.get!]
+  e.tm.mkTerm! .LAMBDA #[boundList, xPlus1]
+
+
+def testDefineFun := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let z := defineFun e
+  return z
+
+#eval testDefineFun
+
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
@@ -136,7 +154,9 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
   let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => translateScalarExpr e x)
   let exprs'' := (exprs'.filterMap id)
   if isTableProject then  e.tm.mkTerm! .TABLE_PROJECT exprs''
-  else match e.semantics with
+  else
+  let t := e.tm.mkVar e.tm.getBooleanSort "s"
+  match e.semantics with
   | .set => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
   | .bag => e.tm.mkTerm! .SET_MAP (exprs''.push query'.get!)
 

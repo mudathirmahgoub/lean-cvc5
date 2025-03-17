@@ -790,6 +790,18 @@ extern_def!? mkNullableSome : TermManager → (term : Term) → Except Error Ter
 extern_def!? mkNullableNull : TermManager → (sort : cvc5.Sort) → Except Error Term
 
 /--
+   * Create a bound variable to be used in a binder (i.e., a quantifier, a
+   * lambda, or a witness binder).
+   *
+   * @note The returned term is always fresh, even if the same arguments
+   *       were provided on a previous call to mkConst().
+   *
+   * @param sort   The sort of the variable.
+   * @param symbol The name of the variable (optional).
+   * @return The variable.
+   -/
+  extern_def!? mkVar : TermManager → (sort : cvc5.Sort) → (name: String) → Except Error Term
+/--
  Create a selector for nullable term.
  - `term`: A nullable term.
  - Returns: The element value of the nullable term.
