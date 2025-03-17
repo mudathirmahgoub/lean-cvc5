@@ -846,14 +846,50 @@ extern "C" lean_obj_res term_get(lean_obj_arg t, lean_obj_arg i)
   return term_box(new Term((*term_unbox(t))[lean_usize_of_nat(i)]));
 }
 
+static void datatype_finalize(void* obj) { delete static_cast<Datatype*>(obj); }
 static void proof_finalize(void* obj) { delete static_cast<Proof*>(obj); }
+
+static void datatype_foreach(void*, b_lean_obj_arg)
+{
+  // do nothing for now
+}
 
 static void proof_foreach(void*, b_lean_obj_arg)
 {
   // do nothing since `Proof` does not contain nested Lean objects
 }
 
+static lean_external_class* g_datatype_class = nullptr;
+
+static inline lean_obj_res datatype_box(Datatype* p)
+{
+  if (g_datatype_class == nullptr)
+  {
+    g_datatype_class =
+        lean_register_external_class(datatype_finalize, datatype_foreach);
+  }
+  return lean_alloc_external(g_datatype_class, p);
+}
+
 static lean_external_class* g_proof_class = nullptr;
+
+extern "C" lean_obj_res sort_getDatatype(lean_obj_arg s)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(lean_box(0),
+                   datatype_box(new Datatype(sort_unbox(s)->getDatatype())));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+static inline const Datatype* datatype_unbox(b_lean_obj_arg d)
+{
+  return static_cast<Datatype*>(lean_get_external_data(d));
+}
+
+extern "C" lean_obj_res datatype_toString(lean_obj_arg datatype)
+{
+  return lean_mk_string(datatype_unbox(datatype)->toString().c_str());
+}
 
 static inline lean_obj_res proof_box(Proof* p)
 {
@@ -867,6 +903,11 @@ static inline lean_obj_res proof_box(Proof* p)
 static inline const Proof* proof_unbox(b_lean_obj_arg p)
 {
   return static_cast<Proof*>(lean_get_external_data(p));
+}
+
+extern "C" lean_obj_res datatype_null(lean_obj_arg unit)
+{
+  return datatype_box(new Datatype());
 }
 
 extern "C" lean_obj_res proof_null(lean_obj_arg unit)

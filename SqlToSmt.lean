@@ -41,11 +41,30 @@ def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
     | some s => e.tm.mkNullableSort? s
 
 
-def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=
+def mkTupleSelect (e: Env) :=
+  let tupleSort := e.tm.mkTupleSort! #[e.tm.getIntegerSort, e.tm.getStringSort, e.tm.getIntegerSort]
   let datatype := tupleSort.getDatatype
-  let constructor := datatype.getConstructor 0
-  let selectorTerm := constructor.getSelector index |>.getTerm
-  e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
+  datatype
+  -- let constructor := datatype.getConstructor 0
+  -- let selectorTerm := constructor.getSelector index |>.getTerm
+  -- e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
+
+def testTupleSelect := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let z := mkTupleSelect e
+  return z
+
+#eval testTupleSelect
+
+
+-- def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=
+--   let datatype := tupleSort.getDatatype
+--   let constructor := datatype.getConstructor 0
+--   let selectorTerm := constructor.getSelector index |>.getTerm
+--   e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
 
 def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   match e.semantics with

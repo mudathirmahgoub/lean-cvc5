@@ -61,6 +61,14 @@ def Proof : Type := ProofImpl.type
 
 instance Proof.instNonemptyProof : Nonempty Proof := ProofImpl.property
 
+
+private opaque DatatypeImpl : NonemptyType.{0}
+
+def Datatype : Type := DatatypeImpl.type
+
+instance Datatype.instNonemptyDatatype : Nonempty Datatype := DatatypeImpl.property
+
+
 private opaque TermManagerImpl : NonemptyType.{0}
 
 /-- Manager for cvc5 terms. -/
@@ -156,6 +164,20 @@ private def mkExceptErr {α : Type} : String → Except Error α :=
 end ffi_except_constructors
 
 end cvc5
+
+namespace cvc5.Datatype
+
+/-- The null datatype. -/
+extern_def null : Unit → Datatype
+
+instance : Inhabited Datatype := ⟨null ()⟩
+
+/-- Get the string representation of this operator. -/
+protected extern_def toString : Datatype → String
+
+instance : ToString Datatype := ⟨Datatype.toString⟩
+
+end cvc5.Datatype
 
 namespace cvc5.Sort
 
@@ -405,6 +427,9 @@ the vector takes priority.
 -/
 extern_def!? substitute
 : cvc5.Sort → (sorts : Array cvc5.Sort) → (replacements : Array cvc5.Sort) → Except Error cvc5.Sort
+
+/-- The underlying datatype of a datatype sort. -/
+extern_def!? getDatatype : cvc5.Sort → Except Error Datatype
 
 instance : ToString cvc5.Sort := ⟨Sort.toString⟩
 instance : Repr cvc5.Sort := ⟨fun self _ => self.toString⟩
