@@ -41,45 +41,24 @@ def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
     | some s => e.tm.mkNullableSort? s
 
 
-def mkTupleSelect (e: Env) :=
-  let tupleSort := e.tm.mkTupleSort! #[e.tm.getIntegerSort, e.tm.getStringSort, e.tm.getIntegerSort]
+def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=
   let datatype := tupleSort.getDatatype
-  datatype
-  -- let constructor := datatype.getConstructor 0
-  -- let selectorTerm := constructor.getSelector index |>.getTerm
-  -- e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
-
-def main (args : List String) : IO UInt32 := do
-  let tm ← TermManager.new
-  let s := (Solver.new tm)
-  let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .bag
-  let z := mkTupleSelect e
-  let c := z.toOption.get![0]!
-  IO.println c
-  return 0
-
+  let constructor := datatype.toOption.get![0]!
+  let selectorTerm := constructor[index]!
+  let selectorTerm := selectorTerm.getTerm.toOption.get!
+  e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
 
 def testTupleSelect := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
-  let z := mkTupleSelect e
-  let c := z.toOption.get![0]!
-  return c
+  let t := e.tm.mkTuple! #[e.tm.mkInteger 1, e.tm.mkInteger 2]
+  let s := mkTupleSelect e t.getSort t 1
+  return s
 
 #check testTupleSelect
 #eval testTupleSelect
-
--- #eval testTupleSelect
-
-
--- def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=
---   let datatype := tupleSort.getDatatype
---   let constructor := datatype.getConstructor 0
---   let selectorTerm := constructor.getSelector index |>.getTerm
---   e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
 
 def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   match e.semantics with

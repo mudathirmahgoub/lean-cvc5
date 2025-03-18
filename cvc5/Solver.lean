@@ -61,6 +61,12 @@ def Proof : Type := ProofImpl.type
 
 instance Proof.instNonemptyProof : Nonempty Proof := ProofImpl.property
 
+private opaque DatatypeSelectorImpl : NonemptyType.{0}
+
+def DatatypeSelector : Type := DatatypeSelectorImpl.type
+
+instance DatatypeSelector.instNonemptyDatatypeSelector : Nonempty DatatypeSelector := DatatypeSelectorImpl.property
+
 private opaque DatatypeConstructorImpl : NonemptyType.{0}
 
 def DatatypeConstructor : Type := DatatypeConstructorImpl.type
@@ -167,6 +173,29 @@ private def mkExceptErr {α : Type} : String → Except Error α :=
 
 end ffi_except_constructors
 
+namespace DatatypeSelector
+
+/-- The null datatype Selector. -/
+extern_def null : Unit → DatatypeSelector
+
+instance : Inhabited DatatypeSelector := ⟨null ()⟩
+
+/--
+   Get the selector term of this datatype selector.
+
+   Selector terms are a class of function-like terms of selector
+   sort (Sort.isDatatypeSelector()), and should be used as the first
+   argument of Terms of kind #APPLY_SELECTOR.
+-/
+extern_def getTerm: DatatypeSelector → Except Error Term
+
+/-- Get the string representation of this datatype Selector. -/
+protected extern_def toString : DatatypeSelector → String
+
+instance : ToString DatatypeSelector := ⟨DatatypeSelector.toString⟩
+
+end DatatypeSelector
+
 namespace DatatypeConstructor
 
 /-- The null datatype constructor. -/
@@ -178,6 +207,19 @@ instance : Inhabited DatatypeConstructor := ⟨null ()⟩
 protected extern_def toString : DatatypeConstructor → String
 
 instance : ToString DatatypeConstructor := ⟨DatatypeConstructor.toString⟩
+
+/-- The number of selectors (so far) of this Datatype constructor. -/
+extern_def getNumSelectors : DatatypeConstructor → Nat
+
+/-- Get the datatype selector with the given name.
+   note This is a linear search through the selectors, so in case of
+   multiple, similarly-named selectors, the first is returned.
+- `idx` The index of the datatype constructor to return.
+-/
+protected extern_def get : (c : DatatypeConstructor) → (idx : Fin c.getNumSelectors) → DatatypeSelector
+
+instance : GetElem DatatypeConstructor Nat DatatypeSelector fun dtc i => i < dtc.getNumSelectors where
+  getElem dtc i h := dtc.get ⟨i, h⟩
 
 end DatatypeConstructor
 

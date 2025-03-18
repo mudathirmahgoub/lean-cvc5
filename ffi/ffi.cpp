@@ -174,6 +174,69 @@ extern "C" lean_obj_res result_toString(lean_obj_arg r)
   return lean_mk_string(result_unbox(r)->toString().c_str());
 }
 
+static void datatypeSelector_finalize(void* obj)
+{
+  delete static_cast<DatatypeSelector*>(obj);
+}
+
+static void datatypeSelector_foreach(void*, b_lean_obj_arg)
+{
+  // do nothing since `DatatypeSelector` does not contain nested Lean objects
+}
+
+static lean_external_class* g_datatypeSelector_class = nullptr;
+
+static inline lean_obj_res datatypeSelector_box(DatatypeSelector* dts)
+{
+  if (g_datatypeSelector_class == nullptr)
+  {
+    g_datatypeSelector_class = lean_register_external_class(
+        datatypeSelector_finalize, datatypeSelector_foreach);
+  }
+  return lean_alloc_external(g_datatypeSelector_class, dts);
+}
+
+static inline const DatatypeSelector* datatypeSelector_unbox(b_lean_obj_arg dts)
+{
+  return static_cast<DatatypeSelector*>(lean_get_external_data(dts));
+}
+
+static inline lean_obj_res term_box(Term* t);
+
+extern "C" lean_obj_res datatypeSelector_getTerm(lean_obj_arg dts)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  return except_ok(lean_box(0),
+                   term_box(new Term(datatypeSelector_unbox(dts)->getTerm())));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
+extern "C" lean_obj_res datatypeSelector_toString(lean_obj_arg dts)
+{
+  return lean_mk_string(datatypeSelector_unbox(dts)->toString().c_str());
+}
+
+static inline const Datatype* datatype_unbox(b_lean_obj_arg dt)
+{
+  return static_cast<Datatype*>(lean_get_external_data(dt));
+}
+
+static inline const DatatypeConstructor* datatypeConstructor_unbox(
+    b_lean_obj_arg dtc)
+{
+  return static_cast<DatatypeConstructor*>(lean_get_external_data(dtc));
+}
+
+extern "C" lean_obj_res datatypeConstructor_getNumSelectors(lean_obj_arg dtc)
+{
+  return lean_usize_to_nat(datatypeConstructor_unbox(dtc)->getNumSelectors());
+}
+
+extern "C" lean_obj_res datatype_getNumConstructors(lean_obj_arg dt)
+{
+  return lean_usize_to_nat(datatype_unbox(dt)->getNumConstructors());
+}
+
 static void datatypeConstructor_finalize(void* obj)
 {
   delete static_cast<DatatypeConstructor*>(obj);
@@ -196,12 +259,6 @@ static inline lean_obj_res datatypeConstructor_box(DatatypeConstructor* dtc)
   return lean_alloc_external(g_datatypeConstructor_class, dtc);
 }
 
-static inline const DatatypeConstructor* datatypeConstructor_unbox(
-    b_lean_obj_arg dtc)
-{
-  return static_cast<DatatypeConstructor*>(lean_get_external_data(dtc));
-}
-
 extern "C" lean_obj_res datatypeConstructor_toString(lean_obj_arg dtc)
 {
   return lean_mk_string(datatypeConstructor_unbox(dtc)->toString().c_str());
@@ -212,6 +269,13 @@ static void datatype_finalize(void* obj) { delete static_cast<Datatype*>(obj); }
 static void datatype_foreach(void*, b_lean_obj_arg)
 {
   // do nothing since `Datatype` does not contain nested Lean objects
+}
+
+extern "C" lean_obj_res datatypeConstructor_get(lean_obj_arg dtc,
+                                                lean_obj_arg idx)
+{
+  return datatypeSelector_box(new DatatypeSelector(
+      (*datatypeConstructor_unbox(dtc))[lean_usize_of_nat(idx)]));
 }
 
 static lean_external_class* g_datatype_class = nullptr;
@@ -226,19 +290,9 @@ static inline lean_obj_res datatype_box(Datatype* dt)
   return lean_alloc_external(g_datatype_class, dt);
 }
 
-static inline const Datatype* datatype_unbox(b_lean_obj_arg dt)
-{
-  return static_cast<Datatype*>(lean_get_external_data(dt));
-}
-
 extern "C" lean_obj_res datatype_null(lean_obj_arg unit)
 {
   return datatype_box(new Datatype());
-}
-
-extern "C" lean_obj_res datatype_getNumConstructors(lean_obj_arg dt)
-{
-  return lean_usize_to_nat(datatype_unbox(dt)->getNumConstructors());
 }
 
 extern "C" lean_obj_res datatype_get(lean_obj_arg dt, lean_obj_arg idx)
@@ -963,6 +1017,11 @@ static inline lean_obj_res proof_box(Proof* p)
 static inline const Proof* proof_unbox(b_lean_obj_arg p)
 {
   return static_cast<Proof*>(lean_get_external_data(p));
+}
+
+extern "C" lean_obj_res datatypeSelector_null(lean_obj_arg unit)
+{
+  return datatypeConstructor_box(new DatatypeConstructor());
 }
 
 extern "C" lean_obj_res datatypeConstructor_null(lean_obj_arg unit)
