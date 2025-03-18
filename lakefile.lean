@@ -123,7 +123,7 @@ extern_lib libffi pkg := do
 
 
 lean_exe «main_executable» {
-  root := `Main
+  root := `SqlToSmt
 }
 
 lean_lib SqlToSmt {

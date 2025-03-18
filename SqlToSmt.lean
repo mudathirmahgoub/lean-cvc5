@@ -49,15 +49,30 @@ def mkTupleSelect (e: Env) :=
   -- let selectorTerm := constructor.getSelector index |>.getTerm
   -- e.tm.mkTerm! .APPLY_SELECTOR #[selectorTerm, t]
 
+def main (args : List String) : IO UInt32 := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let z := mkTupleSelect e
+  let c := z.toOption.get!.getConstructor
+  IO.println c
+  return 0
+
+
 def testTupleSelect := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
   let z := mkTupleSelect e
-  return z
+  let c := z.toOption.get!.getConstructor
+  return c
 
+#check testTupleSelect
 #eval testTupleSelect
+
+-- #eval testTupleSelect
 
 
 -- def mkTupleSelect (e: Env) (tupleSort: cvc5.Sort) (t: cvc5.Term) (index: Nat) : cvc5.Term :=

@@ -68,6 +68,12 @@ def Datatype : Type := DatatypeImpl.type
 
 instance Datatype.instNonemptyDatatype : Nonempty Datatype := DatatypeImpl.property
 
+private opaque DatatypeConstructorImpl : NonemptyType.{0}
+
+def DatatypeConstructor : Type := DatatypeConstructorImpl.type
+
+instance DatatypeConstructor.instNonemptyDatatype : Nonempty DatatypeConstructor := DatatypeConstructorImpl.property
+
 
 private opaque TermManagerImpl : NonemptyType.{0}
 
@@ -177,7 +183,25 @@ protected extern_def toString : Datatype → String
 
 instance : ToString Datatype := ⟨Datatype.toString⟩
 
+
+/-- The null sort. -/
+extern_def getConstructor: Datatype → DatatypeConstructor
+
 end cvc5.Datatype
+
+namespace cvc5.DatatypeConstructor
+
+/-- The null datatype. -/
+extern_def null : Unit → DatatypeConstructor
+
+instance : Inhabited DatatypeConstructor := ⟨null ()⟩
+
+/-- Get the string representation of this constructor. -/
+protected extern_def toString : DatatypeConstructor → String
+
+instance : ToString DatatypeConstructor := ⟨DatatypeConstructor.toString⟩
+
+end cvc5.DatatypeConstructor
 
 namespace cvc5.Sort
 
