@@ -168,26 +168,42 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   | .intersectAll, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
-  let query' := translateTableExpr e query
+  let query' := translateTableExpr e query |>.get!
+  let tupleSort : cvc5.Sort := match e.semantics with
+    | .bag =>  query'.getSort.getBagElementSort!
+    | .set =>  query'.getSort.getSetElementSort!
   let isTableProject := exprs.any (fun x => match x with
     | .column _ => true
     | _ => false)
-  let exprs' : Array (Option cvc5.Term) := exprs.map (fun x => translateScalarExpr e x)
-  let exprs'' := (exprs'.filterMap id)
+  let (projectKind, mapKind) : cvc5.Kind × cvc5.Kind := match e.semantics with
+    | .bag => (.TABLE_PROJECT, .BAG_MAP)
+    | .set => (.RELATION_PROJECT, .SET_MAP)
   if isTableProject then
-  let indices := 5
-  e.tm.mkTerm! .TABLE_PROJECT exprs''
+  let indices := exprs.map (fun x => match x with
+    | .column i => i
+    | _ => panic! "not an indexed column")
+  let op := e.tm.mkOpOfIndices projectKind indices |>.toOption.get!
+  let projection := e.tm.mkTermOfOp op  #[query'] |>.toOption.get!
+  projection
   else
-  let t := e.tm.mkVar e.tm.getBooleanSort "s"
-  match e.semantics with
-  | .set => e.tm.mkTerm! .BAG_MAP (exprs''.push query'.get!)
-  | .bag => e.tm.mkTerm! .SET_MAP (exprs''.push query'.get!)
+  let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
+  let lambda := translateTupleExpr e exprs t |>.get!
+  e.tm.mkTerm! mapKind #[lambda, query']
+
+partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term) : Option cvc5.Term :=
+  let terms := exprs.map (fun expr => translateScalarExpr e t expr)
+  if terms.any (fun t => t.isNone) then none
+  else
+  let
+  tuple := e.tm.mkTuple! (terms.filterMap id)
+  let lambda := e.tm.mkTerm! .LAMBDA #[t, tuple]
+  lambda
 
 
-partial def translateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
+partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option cvc5.Term :=
   match s with
-  | .column _ => none
-  --| .stringLiteral v => e.tm.mkString v
+  | .column index => mkTupleSelect e t.getSort t index
+  | .stringLiteral v => e.tm.mkString v |>.toOption
   | .intLiteral v => e.tm.mkInteger v
   | .boolLiteral v => e.tm.mkBoolean v
   | .nullLiteral b => match b with
@@ -198,7 +214,7 @@ partial def translateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | _ => none
   | .exists tableExpr => translateTableExpr e tableExpr
   | .application op args =>
-    let terms := ((args.map (translateScalarExpr e)).filterMap id)
+    let terms := ((args.map (translateScalarExpr e t)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
     let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
@@ -239,8 +255,6 @@ partial def translateScalarExpr (e: Env) (s: ScalarExpr) : Option cvc5.Term :=
     | "AND" => translateAnd e needsLifting nullableTerms
     | "OR" => translateOr e needsLifting nullableTerms
     | _ => none
-  | _ => none
-
 
 end
 
@@ -312,7 +326,8 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let nullLiteral := ScalarExpr.nullLiteral .boolean
   let x := ScalarExpr.boolLiteral value
   let andExpr := ScalarExpr.application op #[nullLiteral, x]
-  let z : Option cvc5.Term := translateScalarExpr e andExpr
+  let query := (e.tm.mkBoolean true)
+  let z : Option cvc5.Term := translateScalarExpr e query andExpr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -340,7 +355,8 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   let e := Env.mk tm s2.snd HashMap.empty .bag
   let x := ScalarExpr.boolLiteral value
   let expr := ScalarExpr.application op #[x]
-  let z : Option cvc5.Term := translateScalarExpr e expr
+  let query := (e.tm.mkBoolean true)
+  let z : Option cvc5.Term := translateScalarExpr e query expr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -352,3 +368,19 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
 #eval test5 true false "NOT"
 #eval test5 false true "NOT"
 #eval test5 true true "NOT"
+
+
+-- def testProjection (isBag : Bool) := do
+def main (args : List String) : IO UInt32 := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let e := Env.mk tm s HashMap.empty .bag
+  let z := translateSchema e schema
+  let t : TableExpr := .project #[.column 0, .column 1] (.baseTable "users")
+  IO.println s!"I am here"
+  let w := translateTableExpr z t
+  IO.println s!"{w}"
+  return 0
+
+-- #eval testProjection true
+-- #eval testProjection false
