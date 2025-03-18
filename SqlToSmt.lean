@@ -53,9 +53,11 @@ def testTupleSelect := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
-  let t := e.tm.mkTuple! #[e.tm.mkInteger 1, e.tm.mkInteger 2]
+  let s := e.tm.mkString! "hello" false
+  let t := e.tm.mkTuple! #[e.tm.mkInteger 1, s]
   let s := mkTupleSelect e t.getSort t 1
-  return s
+  let z ← e.s.simplify s false
+  return z.fst
 
 #check testTupleSelect
 #eval testTupleSelect

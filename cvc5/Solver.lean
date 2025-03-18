@@ -959,6 +959,15 @@ extern_def!? mkTupleSort : TermManager → (sorts : Array cvc5.Sort) → Except 
 -/
 extern_def mkBoolean : TermManager → (b : Bool) → Term
 
+/--
+   Create a String constant from a `std::string` which may contain SMT-LIB
+   compatible escape sequences like `\u1234` to encode unicode characters.
+   `s`: The string this constant represents.
+   `useEscSequences`: Determines whether escape sequences in `s` should
+                      be converted to the corresponding unicode character.
+-/
+extern_def!? mkString : TermManager → (s: String) → (useEscSequences : Bool := false) → Except Error Term
+
 /-- Create an integer-value term. -/
 private extern_def mkIntegerFromString : TermManager → String → Except Error Term
 with

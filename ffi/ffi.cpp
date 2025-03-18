@@ -1430,6 +1430,18 @@ extern "C" lean_obj_res termManager_mkBoolean(lean_obj_arg tm, uint8_t val)
   return term_box(new Term(mut_tm_unbox(tm)->mkBoolean(bool_unbox(val))));
 }
 
+extern "C" lean_obj_res termManager_mkString(lean_obj_arg tm,
+                                             lean_obj_arg s,
+                                             uint8_t useEscSequences)
+{
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_BEGIN;
+  auto strValue = lean_string_cstr(s);
+  auto boolValue = bool_unbox(useEscSequences);
+  auto term = new Term(mut_tm_unbox(tm)->mkString(strValue, boolValue));
+  return except_ok(lean_box(0), term_box(term));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
 extern "C" lean_obj_res termManager_mkIntegerFromString(lean_obj_arg tm,
                                                         lean_obj_arg val)
 {
