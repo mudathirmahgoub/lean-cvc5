@@ -61,19 +61,17 @@ def Proof : Type := ProofImpl.type
 
 instance Proof.instNonemptyProof : Nonempty Proof := ProofImpl.property
 
+private opaque DatatypeConstructorImpl : NonemptyType.{0}
+
+def DatatypeConstructor : Type := DatatypeConstructorImpl.type
+
+instance DatatypeConstructor.instNonemptyDatatypeConstructor : Nonempty DatatypeConstructor := DatatypeConstructorImpl.property
 
 private opaque DatatypeImpl : NonemptyType.{0}
 
 def Datatype : Type := DatatypeImpl.type
 
 instance Datatype.instNonemptyDatatype : Nonempty Datatype := DatatypeImpl.property
-
-private opaque DatatypeConstructorImpl : NonemptyType.{0}
-
-def DatatypeConstructor : Type := DatatypeConstructorImpl.type
-
-instance DatatypeConstructor.instNonemptyDatatype : Nonempty DatatypeConstructor := DatatypeConstructorImpl.property
-
 
 private opaque TermManagerImpl : NonemptyType.{0}
 
@@ -169,39 +167,59 @@ private def mkExceptErr {α : Type} : String → Except Error α :=
 
 end ffi_except_constructors
 
-end cvc5
+namespace DatatypeConstructor
 
-namespace cvc5.Datatype
+/-- The null datatype constructor. -/
+extern_def null : Unit → DatatypeConstructor
+
+instance : Inhabited DatatypeConstructor := ⟨null ()⟩
+
+/-- Get the string representation of this datatype constructor. -/
+protected extern_def toString : DatatypeConstructor → String
+
+instance : ToString DatatypeConstructor := ⟨DatatypeConstructor.toString⟩
+
+end DatatypeConstructor
+
+namespace Datatype
 
 /-- The null datatype. -/
 extern_def null : Unit → Datatype
 
 instance : Inhabited Datatype := ⟨null ()⟩
 
-/-- Get the string representation of this operator. -/
+/-- Get the string representation of this datatype. -/
 protected extern_def toString : Datatype → String
 
 instance : ToString Datatype := ⟨Datatype.toString⟩
 
+/-- Get the number of constructors of this datatype. -/
+extern_def getNumConstructors : Datatype → Nat
 
-/-- The null sort. -/
-extern_def getConstructor: Datatype → DatatypeConstructor
+/-- Get the datatype constructor at a given index.
 
-end cvc5.Datatype
+note: This is a linear search through the constructors, so in case of
+      multiple, similarly-named constructors, the first is returned.
 
-namespace cvc5.DatatypeConstructor
+- `idx` The index of the datatype constructor to return.
+-/
+protected extern_def get : (dt : Datatype) → (idx : Fin dt.getNumConstructors) → DatatypeConstructor
 
-/-- The null datatype. -/
-extern_def null : Unit → DatatypeConstructor
+instance : GetElem Datatype Nat DatatypeConstructor fun dt i => i < dt.getNumConstructors where
+  getElem dt i h := dt.get ⟨i, h⟩
 
-instance : Inhabited DatatypeConstructor := ⟨null ()⟩
+/-- Get the datatype constructor with the given name.
 
-/-- Get the string representation of this constructor. -/
-protected extern_def toString : DatatypeConstructor → String
+note: This is a linear search through the constructors, so in case of
+      multiple, similarly-named constructors, the first is returned.
 
-instance : ToString DatatypeConstructor := ⟨DatatypeConstructor.toString⟩
+- `name` The name of the datatype constructor.
+-/
+extern_def getConstructor: Datatype → (name : String) → Except Error DatatypeConstructor
 
-end cvc5.DatatypeConstructor
+end Datatype
+
+end cvc5
 
 namespace cvc5.Sort
 
