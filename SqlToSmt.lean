@@ -145,8 +145,8 @@ def testDefineFun := do
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
-  | .baseTable name => e.map[name]?
-  | .project exprs query => translateProject e exprs query
+  | .baseTable name => dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}"; e.map[name]?
+  | .project exprs query =>  dbg_trace s!" .project exprs:  query: "; translateProject e exprs query
   | .tableOperation op l r => translateTableOperation e op l r
   | _ => none
 
@@ -169,25 +169,32 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
+  dbg_trace s!"query': {query'} exprs: {exprs}";
   let tupleSort : cvc5.Sort := match e.semantics with
     | .bag =>  query'.getSort.getBagElementSort!
     | .set =>  query'.getSort.getSetElementSort!
+  dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.any (fun x => match x with
     | .column _ => true
     | _ => false)
+  dbg_trace s!"isTableProject: {isTableProject}";
   let (projectKind, mapKind) : cvc5.Kind × cvc5.Kind := match e.semantics with
     | .bag => (.TABLE_PROJECT, .BAG_MAP)
     | .set => (.RELATION_PROJECT, .SET_MAP)
+  dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isTableProject then
   let indices := exprs.map (fun x => match x with
     | .column i => i
     | _ => panic! "not an indexed column")
+  dbg_trace s!"indices: {indices}";
   let op := e.tm.mkOpOfIndices projectKind indices |>.toOption.get!
+  dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op  #[query'] |>.toOption.get!
   projection
   else
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let lambda := translateTupleExpr e exprs t |>.get!
+  dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! mapKind #[lambda, query']
 
 partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term) : Option cvc5.Term :=
@@ -376,8 +383,8 @@ def main (args : List String) : IO UInt32 := do
   let s := (Solver.new tm)
   let e := Env.mk tm s HashMap.empty .bag
   let z := translateSchema e schema
-  let t : TableExpr := .project #[.column 0, .column 1] (.baseTable "users")
-  IO.println s!"I am here"
+  let t : TableExpr := .project #[.column 0, .column 1] (.baseTable "posts")
+  IO.println s!"z {z}"
   let w := translateTableExpr z t
   IO.println s!"{w}"
   return 0

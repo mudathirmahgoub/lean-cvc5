@@ -14,7 +14,7 @@ inductive TimePart where
   | Second
   deriving Repr
 
-inductive Basetype where
+  inductive Basetype where
   | bigint
   | bigserial
   | bit (size: Nat)
@@ -117,7 +117,41 @@ inductive ScalarExpr : Type where
   | application (function : String) (args : Array ScalarExpr) : ScalarExpr
   deriving Repr
 
+
+
 inductive RowExpr : Type where
   | row (elements : Array ScalarExpr) : RowExpr
   deriving Repr
 end
+
+
+
+instance : ToString Basetype where
+  toString
+    | .bigint => "bigint"
+    | .bigserial => "bigserial"
+    | .bit size => s!"bit({size})"
+    | .bitVarying size => s!"bit varying({size})"
+    | .boolean => "boolean"
+    | .box => "box"
+    | .bytea => "bytea"
+    | .character size => s!"character({size})"
+    | .varchar size => s!"varchar({size})"
+    | .cidr => "cidr"
+    | .circle => "circle"
+    | .date => "date"
+    | _ => s!"sql type"
+
+instance : ToString ScalarExpr where
+  toString
+    | .column index => s!"column({index})"
+    | .stringLiteral value => s!"stringLiteral(\"{value}\")"
+    | .intLiteral value => s!"intLiteral({value})"
+    | .boolLiteral value => s!"boolLiteral({value})"
+    | .nullLiteral type => s!"nullLiteral({type})"
+    | _ => s!"not supported yet"
+
+
+instance : ToString (Array ScalarExpr) where
+  toString arr :=
+    "[" ++ String.intercalate ", " (arr.toList.map toString) ++ "]"
