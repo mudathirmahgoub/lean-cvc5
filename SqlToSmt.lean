@@ -2,7 +2,7 @@ import Std.Data.HashMap
 import cvc5
 import cvc5.Sql
 
-open cvc5 (TermManager Solver)
+open cvc5 (TermManager Solver Kind)
 open Std
 
 structure Env where
@@ -147,8 +147,10 @@ partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Ter
   match tableExpr with
   | .baseTable name => dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}"; e.map[name]?
   | .project exprs query =>  dbg_trace s!" .project exprs:  query: "; translateProject e exprs query
+  | .join l r c => none
+  | .filter query condition => none
   | .tableOperation op l r => translateTableOperation e op l r
-  | _ => none
+  | .values rows => none
 
 partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l
@@ -170,17 +172,14 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
   dbg_trace s!"query': {query'} exprs: {exprs}";
-  let tupleSort : cvc5.Sort := match e.semantics with
-    | .bag =>  query'.getSort.getBagElementSort!
-    | .set =>  query'.getSort.getSetElementSort!
+  let (tupleSort,projectKind, mapKind) := match e.semantics with
+    | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT, Kind.BAG_MAP)
+    | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT, Kind.SET_MAP)
   dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
     | _ => false)
   dbg_trace s!"isTableProject: {isTableProject}";
-  let (projectKind, mapKind) : cvc5.Kind × cvc5.Kind := match e.semantics with
-    | .bag => (.TABLE_PROJECT, .BAG_MAP)
-    | .set => (.RELATION_PROJECT, .SET_MAP)
   dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isTableProject then
   let indices := exprs.map (fun x => match x with
