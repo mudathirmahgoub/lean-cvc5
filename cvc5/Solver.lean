@@ -415,9 +415,6 @@ arguments --- see also `cvc5.Sort.instantiate`.
 -/
 extern_def isInstantiated : cvc5.Sort → Bool
 
-/-- Determine if this is a nullable sort. -/
-protected extern_def isNullable : cvc5.Sort → Bool
-
 /-- A string representation of this sort. -/
 protected extern_def toString : cvc5.Sort → String
 
@@ -947,11 +944,6 @@ This function would return
   expression, and the remaining children are the original arguments.
 -/
 extern_def!? mkNullableLift : TermManager → (kind : Kind) → (args : Array Term) → Except Error Term
-
-/-- Create a tuple sort.
-- `sorts`: The sorts of the elements of the tuple.
--/
-extern_def!? mkTupleSort : TermManager → (sorts : Array cvc5.Sort) → Except Error cvc5.Sort
 
 /-- Create a Boolean constant.
 
