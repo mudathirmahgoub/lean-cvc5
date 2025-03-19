@@ -385,7 +385,7 @@ def testProjection (isBag : Bool) := do
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
   let t : TableExpr := .project #[.column 0, .column 1,
-  .stringLiteral "hello", .application "+" #[.column 0, .column 1]] (.baseTable "posts")
+  .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
   let w := translateTableExpr z t
   return w
 
