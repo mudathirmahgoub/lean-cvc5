@@ -158,7 +158,7 @@ partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Ter
   | .baseTable name => dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}"; e.map[name]?
   | .project exprs query =>  dbg_trace s!" .project exprs:  query: "; translateProject e exprs query
   | .join l r c => none
-  | .filter query condition => none
+  | .filter condition query  => translateFilter e condition query
   | .tableOperation op l r => translateTableOperation e op l r
   | .values rows types => translateValues e rows types
 
@@ -177,6 +177,23 @@ partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Ar
     let singleton := mkSingleton e tuple
     e.tm.mkTerm! unionKind #[table.get!, singleton]
   ) emptyTable
+
+partial def translateFilter (e: Env) (condition: ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
+  let query' := translateTableExpr e query |>.get!
+  let (tupleSort,filterKind) := match e.semantics with
+    | .bag =>  (query'.getSort.getBagElementSort!, Kind.BAG_FILTER)
+    | .set =>  (query'.getSort.getSetElementSort!, Kind.SET_FILTER)
+  let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
+  let condition' := translateScalarExpr e t condition |>.get!
+  let predicate := if condition'.getSort.isNullable
+                then
+                let isSome := e.tm.mkNullableIsSome! condition'
+                let val := e.tm.mkNullableVal! condition'
+                e.tm.mkTerm! .AND #[isSome, val]
+                else condition'
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+  let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
+  e.tm.mkTerm! filterKind #[lambda, query']
 
 partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l
@@ -403,22 +420,6 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
 #eval test5 true true "NOT"
 
 
-def testProjection (isBag : Bool) := do
-  let tm ← TermManager.new
-  let s := (Solver.new tm)
-  let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
-  let z := translateSchema e schema
-  let t : TableExpr := .project #[.column 0, .column 1,
-  .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
-  let w := translateTableExpr z t
-  return w
-
-#eval testProjection true
-#eval testProjection false
-
-
-
 def testValues (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
@@ -436,3 +437,31 @@ def testValues (isBag : Bool) := do
 
 #eval testValues true
 #eval testValues false
+
+def testProjection (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let t : TableExpr := .project #[.column 0, .column 1,
+  .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
+  let w := translateTableExpr z t
+  return w
+
+#eval testProjection true
+#eval testProjection false
+
+
+def testFilter (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let t : TableExpr := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
+  let w := translateTableExpr z t
+  return w
+
+#eval testFilter true
+#eval testFilter false

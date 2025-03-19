@@ -102,7 +102,7 @@ inductive TableExpr where
   | baseTable (name : String) : TableExpr
   | project (expr: Array ScalarExpr) (query: TableExpr) : TableExpr
   | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
-  | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
+  | filter (condition: ScalarExpr) (query: TableExpr) : TableExpr
   | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
   | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : TableExpr
   deriving Repr
