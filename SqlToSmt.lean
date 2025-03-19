@@ -157,7 +157,7 @@ partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Ter
   match tableExpr with
   | .baseTable name => dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}"; e.map[name]?
   | .project exprs query =>  dbg_trace s!" .project exprs:  query: "; translateProject e exprs query
-  | .join l r c => none
+  | .join l r c => translateJoin e l r c
   | .filter condition query  => translateFilter e condition query
   | .tableOperation op l r => translateTableOperation e op l r
   | .values rows types => translateValues e rows types
@@ -238,6 +238,15 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
   let lambda := translateTupleExpr e exprs t |>.get!
   dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! mapKind #[lambda, query']
+
+partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : Option cvc5.Term :=
+  let l' := translateTableExpr e l |>.get!
+  let r' := translateTableExpr e r |>.get!
+  let productKind := match e.semantics with
+    | .bag => Kind.TABLE_PRODUCT
+    | .set => Kind.RELATION_PRODUCT
+  let product := e.tm.mkTerm! productKind #[l', r']
+  e.tm.mkInteger 0
 
 partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term) : Option cvc5.Term :=
   let terms := exprs.map (fun expr => translateScalarExpr e t expr)
