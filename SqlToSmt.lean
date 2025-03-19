@@ -174,7 +174,7 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
     | .bag =>  query'.getSort.getBagElementSort!
     | .set =>  query'.getSort.getSetElementSort!
   dbg_trace s!"tupleSort: {tupleSort}";
-  let isTableProject := exprs.any (fun x => match x with
+  let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
     | _ => false)
   dbg_trace s!"isTableProject: {isTableProject}";
@@ -203,7 +203,8 @@ partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term
   else
   let
   tuple := e.tm.mkTuple! (terms.filterMap id)
-  let lambda := e.tm.mkTerm! .LAMBDA #[t, tuple]
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+  let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
   lambda
 
 
@@ -377,17 +378,14 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
 #eval test5 true true "NOT"
 
 
--- def testProjection (isBag : Bool) := do
-def main (args : List String) : IO UInt32 := do
+def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty .bag
+  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .project #[.column 0, .column 1] (.baseTable "posts")
-  IO.println s!"z {z}"
+  let t : TableExpr := .project #[.column 0, .column 1, .stringLiteral "hello"] (.baseTable "posts")
   let w := translateTableExpr z t
-  IO.println s!"{w}"
-  return 0
+  return w
 
--- #eval testProjection true
--- #eval testProjection false
+#eval testProjection true
+#eval testProjection false
