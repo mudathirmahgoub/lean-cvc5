@@ -97,11 +97,18 @@ inductive TableOp where
   | minusAll
   deriving Repr
 
+inductive Join where
+  | inner
+  | left
+  | right
+  | full
+  deriving Repr
+
 mutual
 inductive TableExpr where
   | baseTable (name : String) : TableExpr
   | project (expr: Array ScalarExpr) (query: TableExpr) : TableExpr
-  | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
+  | join (l: TableExpr) (r: TableExpr) (join : Join) (condition: ScalarExpr) : TableExpr
   | filter (condition: ScalarExpr) (query: TableExpr) : TableExpr
   | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
   | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : TableExpr

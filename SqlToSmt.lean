@@ -157,7 +157,7 @@ partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Ter
   match tableExpr with
   | .baseTable name => dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}"; e.map[name]?
   | .project exprs query =>  dbg_trace s!" .project exprs:  query: "; translateProject e exprs query
-  | .join l r c => translateJoin e l r c
+  | .join l r j c => translateJoin e l r j c
   | .filter condition query  => translateFilter e condition query
   | .tableOperation op l r => translateTableOperation e op l r
   | .values rows types => translateValues e rows types
@@ -239,14 +239,38 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
   dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! mapKind #[lambda, query']
 
-partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : Option cvc5.Term :=
+partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l |>.get!
   let r' := translateTableExpr e r |>.get!
-  let productKind := match e.semantics with
-    | .bag => Kind.TABLE_PRODUCT
-    | .set => Kind.RELATION_PRODUCT
+  let (productKind, filterKind) := match e.semantics with
+    | .bag => (Kind.TABLE_PRODUCT, Kind.BAG_FILTER)
+    | .set => (Kind.RELATION_PRODUCT, Kind.SET_FILTER)
   let product := e.tm.mkTerm! productKind #[l', r']
-  e.tm.mkInteger 0
+  let tupleSort := match e.semantics with
+    | .bag => product.getSort.getBagElementSort!
+    | .set => product.getSort.getSetElementSort!
+  let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
+  let condition' := translateScalarExpr e t condition |>.get!
+  -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
+  -- let value := simplified.getBooleanValue!
+  -- let product' :=
+  -- if value then product
+  -- else
+  let predicate := if condition'.getSort.isNullable
+                then
+                let isSome := e.tm.mkNullableIsSome! condition'
+                let val := e.tm.mkNullableVal! condition'
+                e.tm.mkTerm! .AND #[isSome, val]
+                else condition'
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+  let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
+  let product' := e.tm.mkTerm! filterKind #[lambda, product]
+  match join with
+  | .inner => product'
+  | .left => none
+  | .right => none
+  | .full => none
+
 
 partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term) : Option cvc5.Term :=
   let terms := exprs.map (fun expr => translateScalarExpr e t expr)
@@ -474,3 +498,17 @@ def testFilter (isBag : Bool) := do
 
 #eval testFilter true
 #eval testFilter false
+
+
+def testProduct (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let t : TableExpr := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
+  let w := translateTableExpr z t
+  return w
+
+#eval testProduct true
+#eval testProduct false

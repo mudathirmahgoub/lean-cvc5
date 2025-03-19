@@ -1623,6 +1623,17 @@ extern "C" lean_obj_res solver_simplify(lean_obj_arg inst,
   CVC5_LEAN_API_TRY_CATCH_SOLVER_END(inst, solver);
 }
 
+extern "C" lean_obj_res solver_simplifyTerm(lean_obj_arg solver,
+                                            lean_obj_arg term,
+                                            lean_obj_arg applySubs)
+{
+  CVC5_LEAN_API_TRY_CATCH_SOLVER_BEGIN;
+  Term value = solver_unbox(solver)->simplify(
+      *term_unbox(term), bool_unbox(lean_unbox(applySubs)));
+  return except_ok(lean_box(0), term_box(new Term(value)));
+  CVC5_LEAN_API_TRY_CATCH_EXCEPT_END;
+}
+
 extern "C" lean_obj_res solver_declareFun(lean_obj_arg inst,
                                           lean_obj_arg symbol,
                                           lean_obj_arg sorts,

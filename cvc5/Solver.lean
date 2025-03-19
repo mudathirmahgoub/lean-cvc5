@@ -1097,6 +1097,9 @@ may replace occurrences of `x` with `0`.
 -/
 extern_def simplify : (term : Term) → (applySubs : Bool := false) → SolverT m Term
 
+/-- same as above, but without monads -/
+extern_def simplifyTerm : (solver: Solver) → (term : Term) → (applySubs : Bool := false) → Except Error Term
+
 /--
 Declare n-ary function symbol.
 
