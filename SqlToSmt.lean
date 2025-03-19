@@ -381,9 +381,11 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
 def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .project #[.column 0, .column 1, .stringLiteral "hello"] (.baseTable "posts")
+  let t : TableExpr := .project #[.column 0, .column 1,
+  .stringLiteral "hello", .application "+" #[.column 0, .column 1]] (.baseTable "posts")
   let w := translateTableExpr z t
   return w
 
