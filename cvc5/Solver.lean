@@ -875,6 +875,18 @@ extern_def!? mkNullableSort : TermManager → (sort : cvc5.Sort) → Except Erro
 -/
 extern_def mkParamSort : TermManager → (symbol : String) → cvc5.Sort
 
+/--
+   Create a constant representing an empty set of the given sort.
+   - `sort`: The sort of the set elements.
+-/
+extern_def!? mkEmptySet : TermManager → (sort : cvc5.Sort) → Except Error Term
+
+/--
+   Create a constant representing an empty bag of the given sort.
+   - `sort`: The sort of the bag elements.
+-/
+extern_def!? mkEmptyBag : TermManager → (sort : cvc5.Sort) → Except Error Term
+
 /-- Create a tuple term.
 - `terms`: The elements in the tuple.
 -/

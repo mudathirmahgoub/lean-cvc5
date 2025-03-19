@@ -104,7 +104,7 @@ inductive TableExpr where
   | join (l: TableExpr) (r: TableExpr) (condition: ScalarExpr) : TableExpr
   | filter (query: TableExpr) (condition: ScalarExpr) : TableExpr
   | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
-  | values (rows: Array (Array ScalarExpr)) : TableExpr
+  | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : TableExpr
   deriving Repr
 
 inductive ScalarExpr : Type where

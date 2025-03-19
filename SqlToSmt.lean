@@ -142,6 +142,16 @@ def testDefineFun := do
 
 #eval testDefineFun
 
+def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
+  match e.semantics with
+  | .bag => e.tm.mkEmptyBag! s
+  | .set => e.tm.mkEmptySet! s
+
+def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
+  match e.semantics with
+  | .bag => e.tm.mkTerm! .BAG_MAKE #[tuple, e.tm.mkInteger 1]
+  | .set => e.tm.mkTerm! .SET_SINGLETON #[tuple]
+
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
   match tableExpr with
@@ -150,7 +160,23 @@ partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Ter
   | .join l r c => none
   | .filter query condition => none
   | .tableOperation op l r => translateTableOperation e op l r
-  | .values rows => none
+  | .values rows types => translateValues e rows types
+
+partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Array Datatype): Option cvc5.Term :=
+  let tuples := rows.map (fun row =>
+  let elements := row.map (fun expr => translateScalarExpr e (e.tm.mkInteger 0) expr) |>.filterMap id
+  e.tm.mkTuple! elements)
+  let sorts := types.map (fun t => translateDatatype e t) |>.filterMap id
+  let tupleSort := e.tm.mkTupleSort! sorts
+  let tableSort := mkTableSort e tupleSort
+  let emptyTable := mkEmptyTable e tableSort
+  let unionKind := match e.semantics with
+    | .bag => Kind.BAG_UNION_DISJOINT
+    | .set => Kind.SET_UNION
+  tuples.foldl (fun table tuple =>
+    let singleton := mkSingleton e tuple
+    e.tm.mkTerm! unionKind #[table.get!, singleton]
+  ) emptyTable
 
 partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l
@@ -390,3 +416,23 @@ def testProjection (isBag : Bool) := do
 
 #eval testProjection true
 #eval testProjection false
+
+
+
+def testValues (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let t : TableExpr := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
+                                #[.intLiteral 2, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1]]
+                                #[.datatype .integer false,
+                                .datatype (.varchar 20) false,
+                                .datatype (.varchar 20) false,
+                                .datatype .integer false]
+  let w := translateTableExpr z t
+  return w
+
+#eval testValues true
+#eval testValues false
