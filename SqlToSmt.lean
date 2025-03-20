@@ -496,6 +496,21 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
 
 end
 
+
+def verify (e: Env) (q1 q2: TableExpr) : IO Unit := do
+  let q1' := translateTableExpr e q1 |>.get!
+  dbg_trace s!"q1: {q1'}"
+  let q2' := translateTableExpr e q2 |>.get!
+  dbg_trace s!"q2: {q2'}"
+  let formula := mkTableOp e .DISTINCT q1' q2'
+  dbg_trace s!"formula: {formula}"
+  IO.println s!""
+  let _ ← e.s.assertFormula formula
+  let (r, _) ← e.s.checkSat
+  let result := r |>.toOption
+  IO.println s!"{result}"
+
+
 def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
@@ -729,3 +744,19 @@ def testProjectUnion (isBag : Bool) := do
 
 --#eval testProjectUnion true
 --#eval testProjectUnion false
+
+def testVerify (isBag : Bool) : IO Unit := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let q1 : TableExpr := .tableOperation
+    .unionAll
+    (.project #[.column 0, .column 1] (.baseTable "users"))
+    (.project #[.column 0, .column 1] (.baseTable "posts"))
+  let q2 := q1
+  verify z q1 q2
+
+
+#eval testVerify true
