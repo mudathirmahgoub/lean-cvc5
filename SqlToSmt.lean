@@ -38,6 +38,11 @@ def getFilterKind (e: Env) : cvc5.Kind :=
   | .bag => .BAG_FILTER
   | .set => .SET_FILTER
 
+def getProductKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => .TABLE_PRODUCT
+  | .set => .RELATION_PRODUCT
+
 def translateBasetype? (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
   | .bigint => e.tm.getIntegerSort
@@ -176,13 +181,13 @@ def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
   if s.isNullable then s else e.tm.mkNullableSort! s
 
 def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
-  let (aSort, productSort, projectKind, differenceKind , mapKind) := match e.semantics with
-    | .bag => (a.getSort.getBagElementSort!, product.getSort.getBagElementSort!, Kind.TABLE_PROJECT, Kind.BAG_DIFFERENCE_REMOVE, Kind.BAG_MAP)
-    | .set => (a.getSort.getSetElementSort!, product.getSort.getSetElementSort!, Kind.RELATION_PROJECT, Kind.SET_MINUS, Kind.SET_MAP)
+  let (aSort, productSort, differenceKind) := match e.semantics with
+    | .bag => (a.getSort.getBagElementSort!, product.getSort.getBagElementSort!, Kind.BAG_DIFFERENCE_REMOVE)
+    | .set => (a.getSort.getSetElementSort!, product.getSort.getSetElementSort!, Kind.SET_MINUS)
   let (aTupleLength, productTupleLength) := (aSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aIndices := getIndices aTupleLength
 -- dbg_trace s!"aIndices: {aIndices}";
-  let op := e.tm.mkOpOfIndices projectKind aIndices |>.toOption.get!
+  let op := e.tm.mkOpOfIndices (getProjectKind e) aIndices |>.toOption.get!
 -- dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op #[product] |>.toOption.get!
 -- dbg_trace s!"projection: {projection}";
@@ -203,7 +208,7 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[aVar]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
   -- dbg_trace s!"lambda: {lambda}";
-  let map := e.tm.mkTerm! mapKind #[lambda, difference]
+  let map := e.tm.mkTerm! (getMapKind e) #[lambda, difference]
   -- dbg_trace s!"map: {map}";
   map
 
@@ -256,9 +261,9 @@ def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Arr
 
 
 def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
-  let (aElementSort, bElementSort, mapKind) := match e.semantics with
-    | .bag => (a.getSort.getBagElementSort!, b.getSort.getBagElementSort!, Kind.BAG_MAP)
-    | .set => (a.getSort.getSetElementSort!, b.getSort.getSetElementSort!, Kind.SET_MAP)
+  let (aElementSort, bElementSort) := match e.semantics with
+    | .bag => (a.getSort.getBagElementSort!, b.getSort.getBagElementSort!)
+    | .set => (a.getSort.getSetElementSort!, b.getSort.getSetElementSort!)
 --dbg_trace s!"op: {op}";
   let aSorts := aElementSort.getTupleSorts!
   let bSorts := bElementSort.getTupleSorts!
@@ -313,9 +318,9 @@ partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Ar
 
 partial def translateFilter (e: Env) (condition: ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
-  let (tupleSort,filterKind) := match e.semantics with
-    | .bag =>  (query'.getSort.getBagElementSort!, Kind.BAG_FILTER)
-    | .set =>  (query'.getSort.getSetElementSort!, Kind.SET_FILTER)
+  let tupleSort := match e.semantics with
+    | .bag =>  query'.getSort.getBagElementSort!
+    | .set =>  query'.getSort.getSetElementSort!
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let condition' := translateScalarExpr e t condition |>.get!
   let predicate := if condition'.getSort.isNullable
@@ -326,7 +331,7 @@ partial def translateFilter (e: Env) (condition: ScalarExpr) (query: TableExpr) 
                 else condition'
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
-  e.tm.mkTerm! filterKind #[lambda, query']
+  e.tm.mkTerm! (getFilterKind e) #[lambda, query']
 
 partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l
@@ -348,9 +353,9 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
-  let (tupleSort,projectKind, mapKind) := match e.semantics with
-    | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT, Kind.BAG_MAP)
-    | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT, Kind.SET_MAP)
+  let (tupleSort,projectKind) := match e.semantics with
+    | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT)
+    | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT)
 --dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
@@ -374,15 +379,15 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let lambda := translateTupleExpr e exprs t |>.get!
 --dbg_trace s!"lambda: {lambda}";
-  e.tm.mkTerm! mapKind #[lambda, query']
+  e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
 partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
   let l' := translateTableExpr e l |>.get!
   let r' := translateTableExpr e r |>.get!
-  let (productKind, filterKind, unionKind) := match e.semantics with
-    | .bag => (Kind.TABLE_PRODUCT, Kind.BAG_FILTER, Kind.BAG_UNION_DISJOINT)
-    | .set => (Kind.RELATION_PRODUCT, Kind.SET_FILTER, Kind.SET_UNION)
-  let product := e.tm.mkTerm! productKind #[l', r']
+  let unionKind := match e.semantics with
+    | .bag => Kind.BAG_UNION_DISJOINT
+    | .set => Kind.SET_UNION
+  let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := match e.semantics with
     | .bag => product.getSort.getBagElementSort!
     | .set => product.getSort.getSetElementSort!
@@ -401,7 +406,7 @@ partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (c
                 else condition'
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
-  let product' := e.tm.mkTerm! filterKind #[lambda, product]
+  let product' := e.tm.mkTerm! (getFilterKind e) #[lambda, product]
   match join with
   | .inner => product'
   | .left =>
