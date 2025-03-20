@@ -75,7 +75,7 @@ def testTupleSelect := do
   return z.fst
 
 #check testTupleSelect
---#eval testTupleSelect
+#eval testTupleSelect
 
 def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   match e.semantics with
@@ -155,7 +155,7 @@ def testDefineFun := do
   let z := defineFun e
   return z
 
---#eval testDefineFun
+#eval testDefineFun
 
 def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
   match e.semantics with
@@ -170,7 +170,7 @@ def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
 def getIndices (n : Nat) : Array Nat :=
   Array.mkArray n 0 |>.mapIdx (fun i _ => i)
 
---#eval getIndices 5
+#eval getIndices 5
 
 def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
   if s.isNullable then s else e.tm.mkNullableSort! s
@@ -299,18 +299,18 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   let l' := translateTableExpr e l
   let r' := translateTableExpr e r
   match op, e.semantics with
-  | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!])]
+  | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!)]
   | .unionAll,.bag => mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
   | .union, .set => mkTableOp e .SET_UNION  l'.get! r'.get!
   | .unionAll,.set => mkTableOp e .SET_UNION  l'.get! r'.get!
-  | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[e.tm.mkTerm! .BAG_SETOF #[l'.get!], r'.get!]
-  | .minusAll,.bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[l'.get!, r'.get!]
-  | .minus, .set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
-  | .minusAll,.set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
-  | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!])]
-  | .intersectAll, .bag => e.tm.mkTerm! .BAG_INTER_MIN  #[l'.get!, r'.get!]
-  | .intersect, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
-  | .intersectAll, .set => e.tm.mkTerm! .SET_INTER  #[l'.get!, r'.get!]
+  | .minus, .bag => mkTableOp e .BAG_DIFFERENCE_SUBTRACT  (e.tm.mkTerm! .BAG_SETOF #[l'.get!]) r'.get!
+  | .minusAll,.bag => mkTableOp e .BAG_DIFFERENCE_SUBTRACT  l'.get! r'.get!
+  | .minus, .set => mkTableOp e .SET_MINUS  l'.get! r'.get!
+  | .minusAll,.set => mkTableOp e .SET_MINUS  l'.get! r'.get!
+  | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(mkTableOp e .BAG_INTER_MIN  l'.get! r'.get!)]
+  | .intersectAll, .bag => mkTableOp e .BAG_INTER_MIN  l'.get! r'.get!
+  | .intersect, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
+  | .intersectAll, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
@@ -493,8 +493,8 @@ def test2 (isBag : Bool) := do
   let z := translateSchema e schema
   return z.map
 
---#eval test2 true
---#eval test2 false
+#eval test2 true
+#eval test2 false
 
 
 def test3 (isBag : Bool) := do
@@ -506,8 +506,8 @@ def test3 (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval test3 true
---#eval test3 false
+#eval test3 true
+#eval test3 false
 
 
 def test4 (simplify: Bool) (value: Bool) (op: String) := do
@@ -529,15 +529,15 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
 
 
 
---#eval test4 true true "AND"
---#eval test4 false true "AND"
---#eval test4 true true "OR"
---#eval test4 false true "OR"
+#eval test4 true true "AND"
+#eval test4 false true "AND"
+#eval test4 true true "OR"
+#eval test4 false true "OR"
 
---#eval test4 true false "AND"
---#eval test4 false false "AND"
---#eval test4 true false "OR"
---#eval test4 false false "OR"
+#eval test4 true false "AND"
+#eval test4 false false "AND"
+#eval test4 true false "OR"
+#eval test4 false false "OR"
 
 
 def test5 (simplify: Bool) (value: Bool) (op: String) := do
@@ -556,10 +556,10 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   else
     return .ok z'
 
---#eval test5 false false "NOT"
---#eval test5 true false "NOT"
---#eval test5 false true "NOT"
---#eval test5 true true "NOT"
+#eval test5 false false "NOT"
+#eval test5 true false "NOT"
+#eval test5 false true "NOT"
+#eval test5 true true "NOT"
 
 
 def testValues (isBag : Bool) := do
@@ -577,8 +577,8 @@ def testValues (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval testValues true
---#eval testValues false
+#eval testValues true
+#eval testValues false
 
 def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
@@ -591,8 +591,8 @@ def testProjection (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval testProjection true
---#eval testProjection false
+#eval testProjection true
+#eval testProjection false
 
 
 def testFilter (isBag : Bool) := do
@@ -605,8 +605,8 @@ def testFilter (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval testFilter true
---#eval testFilter false
+#eval testFilter true
+#eval testFilter false
 
 
 def testProduct (isBag : Bool) := do
@@ -619,8 +619,8 @@ def testProduct (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval testProduct true
---#eval testProduct false
+#eval testProduct true
+#eval testProduct false
 
 
 def testLeftJoin (isBag : Bool) := do
@@ -633,8 +633,8 @@ def testLeftJoin (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
---#eval testLeftJoin true
---#eval testLeftJoin false
+#eval testLeftJoin true
+#eval testLeftJoin false
 
 
 
