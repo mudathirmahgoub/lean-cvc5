@@ -23,6 +23,21 @@ instance : ToString (HashMap String cvc5.Term) where
   toString e := printHashMap e
 
 
+def getMapKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => .BAG_MAP
+  | .set => .SET_MAP
+
+def getProjectKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => .TABLE_PROJECT
+  | .set => .RELATION_PROJECT
+
+def getFilterKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => .BAG_FILTER
+  | .set => .SET_FILTER
+
 def translateBasetype? (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
   | .bigint => e.tm.getIntegerSort
@@ -60,7 +75,7 @@ def testTupleSelect := do
   return z.fst
 
 #check testTupleSelect
-#eval testTupleSelect
+--#eval testTupleSelect
 
 def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   match e.semantics with
@@ -140,7 +155,7 @@ def testDefineFun := do
   let z := defineFun e
   return z
 
-#eval testDefineFun
+--#eval testDefineFun
 
 def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
   match e.semantics with
@@ -155,7 +170,7 @@ def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
 def getIndices (n : Nat) : Array Nat :=
   Array.mkArray n 0 |>.mapIdx (fun i _ => i)
 
-#eval getIndices 5
+--#eval getIndices 5
 
 def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
   if s.isNullable then s else e.tm.mkNullableSort! s
@@ -193,14 +208,45 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
   map
 
 
+def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Array cvc5.Sort) : cvc5.Term :=
+  let zip := targetSorts.zip tupleSorts
+  let tupleSort := t.getSort
+  let terms := zip.mapIdx (fun i (targetSort, querySort) =>
+    let term := mkTupleSelect e tupleSort t i
+    if targetSort == querySort then term
+    else e.tm.mkNullableSome! term)
+  let tuple := e.tm.mkTuple terms |>.toOption.get!
+  dbg_trace s!"tuple: {tuple}";
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+  let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
+  e.tm.mkTerm! (getMapKind e) #[lambda, query]
+
+
 def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   let (aElementSort, bElementSort, mapKind) := match e.semantics with
     | .bag => (a.getSort.getBagElementSort!, b.getSort.getBagElementSort!, Kind.BAG_MAP)
     | .set => (a.getSort.getSetElementSort!, b.getSort.getSetElementSort!, Kind.SET_MAP)
+  dbg_trace s!"op: {op}";
   let aSorts := aElementSort.getTupleSorts!
   let bSorts := bElementSort.getTupleSorts!
+  if aSorts == bSorts then
+  let ret := e.tm.mkTerm! op #[a, b]
+  ret
+  else
+  let zip := aSorts.zip bSorts
+  dbg_trace s!"zip: {zip}";
+  let sorts := zip.map (fun (aSort, bSort) => if aSort == bSort then aSort
+                        else if aSort.isNullable then aSort else bSort)
+  let aVar := e.tm.mkVar aElementSort "t" |>.toOption.get!
+  let bVar := e.tm.mkVar bElementSort "t" |>.toOption.get!
+  let a' := if aSorts == sorts then a else liftTupleElements e aVar a sorts aSorts
+  let b' := if bSorts == sorts then b else liftTupleElements e bVar b sorts bSorts
+  dbg_trace s!"aSorts == sorts: {aSorts == sorts}";
+  dbg_trace s!"bSorts == sorts: {bSorts == sorts}";
+  dbg_trace s!"a': {a'}";
+  dbg_trace s!"b': {b'}";
+  e.tm.mkTerm! op #[a', b']
 
-  e.tm.mkTerm! op #[a, b]
 
 mutual
 partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
@@ -254,9 +300,9 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   let r' := translateTableExpr e r
   match op, e.semantics with
   | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!])]
-  | .unionAll,.bag => e.tm.mkTerm! .BAG_UNION_DISJOINT  #[l'.get!, r'.get!]
-  | .union, .set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
-  | .unionAll,.set => e.tm.mkTerm! .SET_UNION  #[l'.get!, r'.get!]
+  | .unionAll,.bag => mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
+  | .union, .set => mkTableOp e .SET_UNION  l'.get! r'.get!
+  | .unionAll,.set => mkTableOp e .SET_UNION  l'.get! r'.get!
   | .minus, .bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[e.tm.mkTerm! .BAG_SETOF #[l'.get!], r'.get!]
   | .minusAll,.bag => e.tm.mkTerm! .BAG_DIFFERENCE_SUBTRACT  #[l'.get!, r'.get!]
   | .minus, .set => e.tm.mkTerm! .SET_MINUS  #[l'.get!, r'.get!]
@@ -268,29 +314,33 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
-  -- dbg_trace s!"query': {query'} exprs: {exprs}";
+  dbg_trace s!"query': {query'} exprs: {exprs}";
   let (tupleSort,projectKind, mapKind) := match e.semantics with
     | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT, Kind.BAG_MAP)
     | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT, Kind.SET_MAP)
-  -- dbg_trace s!"tupleSort: {tupleSort}";
+  dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
     | _ => false)
-  -- dbg_trace s!"isTableProject: {isTableProject}";
-  -- dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
+  dbg_trace s!"isTableProject: {isTableProject}";
+  dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isTableProject then
   let indices := exprs.map (fun x => match x with
     | .column i => i
     | _ => panic! "not an indexed column")
-  -- dbg_trace s!"indices: {indices}";
+  dbg_trace s!"indices: {indices}";
   let op := e.tm.mkOpOfIndices projectKind indices |>.toOption.get!
-  -- dbg_trace s!"op: {op}";
+  dbg_trace s!"op: {op}";
+  dbg_trace s!"query: {repr query}";
+  dbg_trace s!"query': {query'}";
+  dbg_trace s!"query: {query'.getSort} I am here";
   let projection := e.tm.mkTermOfOp op  #[query'] |>.toOption.get!
+  dbg_trace s!"projection: {projection}";
   projection
   else
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let lambda := translateTupleExpr e exprs t |>.get!
-  -- dbg_trace s!"lambda: {lambda}";
+  dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! mapKind #[lambda, query']
 
 partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
@@ -323,8 +373,9 @@ partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (c
   | .inner => product'
   | .left =>
     let left := mkLeft e l' product'
-    -- dbg_trace s!"left: {left}";
-    let join := e.tm.mkTerm! unionKind #[product', left]
+    dbg_trace s!"left: {left}";
+    -- let join := e.tm.mkTerm! unionKind #[product', left]
+    let join := mkTableOp e unionKind product' left
     join
   | .right => none
   | .full => none
@@ -415,8 +466,8 @@ def test1 := do
 def schema : DatabaseSchema :=
   { tables := #[
       { name := "users", columns := #[
-          { name := "id", datatype := Datatype.datatype Basetype.integer true },
-          { name := "name", datatype := Datatype.datatype Basetype.text true },
+          { name := "id", datatype := Datatype.datatype Basetype.integer false },
+          { name := "name", datatype := Datatype.datatype Basetype.integer false },
           { name := "email", datatype := Datatype.datatype Basetype.text true },
           { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
         ]
@@ -442,8 +493,8 @@ def test2 (isBag : Bool) := do
   let z := translateSchema e schema
   return z.map
 
-#eval test2 true
-#eval test2 false
+--#eval test2 true
+--#eval test2 false
 
 
 def test3 (isBag : Bool) := do
@@ -455,8 +506,8 @@ def test3 (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
-#eval test3 true
-#eval test3 false
+--#eval test3 true
+--#eval test3 false
 
 
 def test4 (simplify: Bool) (value: Bool) (op: String) := do
@@ -478,15 +529,15 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
 
 
 
-#eval test4 true true "AND"
-#eval test4 false true "AND"
-#eval test4 true true "OR"
-#eval test4 false true "OR"
+--#eval test4 true true "AND"
+--#eval test4 false true "AND"
+--#eval test4 true true "OR"
+--#eval test4 false true "OR"
 
-#eval test4 true false "AND"
-#eval test4 false false "AND"
-#eval test4 true false "OR"
-#eval test4 false false "OR"
+--#eval test4 true false "AND"
+--#eval test4 false false "AND"
+--#eval test4 true false "OR"
+--#eval test4 false false "OR"
 
 
 def test5 (simplify: Bool) (value: Bool) (op: String) := do
@@ -505,10 +556,10 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   else
     return .ok z'
 
-#eval test5 false false "NOT"
-#eval test5 true false "NOT"
-#eval test5 false true "NOT"
-#eval test5 true true "NOT"
+--#eval test5 false false "NOT"
+--#eval test5 true false "NOT"
+--#eval test5 false true "NOT"
+--#eval test5 true true "NOT"
 
 
 def testValues (isBag : Bool) := do
@@ -526,8 +577,8 @@ def testValues (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
-#eval testValues true
-#eval testValues false
+--#eval testValues true
+--#eval testValues false
 
 def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
@@ -540,8 +591,8 @@ def testProjection (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
-#eval testProjection true
-#eval testProjection false
+--#eval testProjection true
+--#eval testProjection false
 
 
 def testFilter (isBag : Bool) := do
@@ -554,8 +605,8 @@ def testFilter (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
-#eval testFilter true
-#eval testFilter false
+--#eval testFilter true
+--#eval testFilter false
 
 
 def testProduct (isBag : Bool) := do
@@ -568,8 +619,8 @@ def testProduct (isBag : Bool) := do
   let w := translateTableExpr z t
   return w
 
-#eval testProduct true
-#eval testProduct false
+--#eval testProduct true
+--#eval testProduct false
 
 
 def testLeftJoin (isBag : Bool) := do
@@ -578,9 +629,29 @@ def testLeftJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .join (.baseTable "posts") (.baseTable "posts") .left (.boolLiteral true)
+  let t : TableExpr := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
   let w := translateTableExpr z t
   return w
 
-#eval testLeftJoin true
-#eval testLeftJoin false
+--#eval testLeftJoin true
+--#eval testLeftJoin false
+
+
+
+def testProjectUnion (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let z := translateSchema e schema
+  let t : TableExpr := .tableOperation
+    .unionAll
+    (.project #[.column 0, .column 1] (.baseTable "users"))
+    (.project #[.column 0, .column 1] (.baseTable "posts"))
+
+  let w := translateTableExpr z t
+  return w
+
+
+#eval testProjectUnion true
+#eval testProjectUnion false
