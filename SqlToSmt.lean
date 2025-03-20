@@ -216,7 +216,7 @@ def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Arr
     if targetSort == querySort then term
     else e.tm.mkNullableSome! term)
   let tuple := e.tm.mkTuple terms |>.toOption.get!
-  dbg_trace s!"tuple: {tuple}";
+--dbg_trace s!"tuple: {tuple}";
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
   e.tm.mkTerm! (getMapKind e) #[lambda, query]
@@ -226,7 +226,7 @@ def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   let (aElementSort, bElementSort, mapKind) := match e.semantics with
     | .bag => (a.getSort.getBagElementSort!, b.getSort.getBagElementSort!, Kind.BAG_MAP)
     | .set => (a.getSort.getSetElementSort!, b.getSort.getSetElementSort!, Kind.SET_MAP)
-  dbg_trace s!"op: {op}";
+--dbg_trace s!"op: {op}";
   let aSorts := aElementSort.getTupleSorts!
   let bSorts := bElementSort.getTupleSorts!
   if aSorts == bSorts then
@@ -234,17 +234,17 @@ def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   ret
   else
   let zip := aSorts.zip bSorts
-  dbg_trace s!"zip: {zip}";
+--dbg_trace s!"zip: {zip}";
   let sorts := zip.map (fun (aSort, bSort) => if aSort == bSort then aSort
                         else if aSort.isNullable then aSort else bSort)
   let aVar := e.tm.mkVar aElementSort "t" |>.toOption.get!
   let bVar := e.tm.mkVar bElementSort "t" |>.toOption.get!
   let a' := if aSorts == sorts then a else liftTupleElements e aVar a sorts aSorts
   let b' := if bSorts == sorts then b else liftTupleElements e bVar b sorts bSorts
-  dbg_trace s!"aSorts == sorts: {aSorts == sorts}";
-  dbg_trace s!"bSorts == sorts: {bSorts == sorts}";
-  dbg_trace s!"a': {a'}";
-  dbg_trace s!"b': {b'}";
+--dbg_trace s!"aSorts == sorts: {aSorts == sorts}";
+--dbg_trace s!"bSorts == sorts: {bSorts == sorts}";
+--dbg_trace s!"a': {a'}";
+--dbg_trace s!"b': {b'}";
   e.tm.mkTerm! op #[a', b']
 
 
@@ -314,33 +314,33 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
   let query' := translateTableExpr e query |>.get!
-  dbg_trace s!"query': {query'} exprs: {exprs}";
+--dbg_trace s!"query': {query'} exprs: {exprs}";
   let (tupleSort,projectKind, mapKind) := match e.semantics with
     | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT, Kind.BAG_MAP)
     | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT, Kind.SET_MAP)
-  dbg_trace s!"tupleSort: {tupleSort}";
+--dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
     | _ => false)
-  dbg_trace s!"isTableProject: {isTableProject}";
-  dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
+--dbg_trace s!"isTableProject: {isTableProject}";
+--dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isTableProject then
   let indices := exprs.map (fun x => match x with
     | .column i => i
     | _ => panic! "not an indexed column")
-  dbg_trace s!"indices: {indices}";
+--dbg_trace s!"indices: {indices}";
   let op := e.tm.mkOpOfIndices projectKind indices |>.toOption.get!
-  dbg_trace s!"op: {op}";
-  dbg_trace s!"query: {repr query}";
-  dbg_trace s!"query': {query'}";
-  dbg_trace s!"query: {query'.getSort} I am here";
+--dbg_trace s!"op: {op}";
+--dbg_trace s!"query: {repr query}";
+--dbg_trace s!"query': {query'}";
+--dbg_trace s!"query: {query'.getSort} I am here";
   let projection := e.tm.mkTermOfOp op  #[query'] |>.toOption.get!
-  dbg_trace s!"projection: {projection}";
+--dbg_trace s!"projection: {projection}";
   projection
   else
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let lambda := translateTupleExpr e exprs t |>.get!
-  dbg_trace s!"lambda: {lambda}";
+--dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! mapKind #[lambda, query']
 
 partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
@@ -373,7 +373,7 @@ partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (c
   | .inner => product'
   | .left =>
     let left := mkLeft e l' product'
-    dbg_trace s!"left: {left}";
+  --dbg_trace s!"left: {left}";
     -- let join := e.tm.mkTerm! unionKind #[product', left]
     let join := mkTableOp e unionKind product' left
     join
@@ -466,15 +466,15 @@ def test1 := do
 def schema : DatabaseSchema :=
   { tables := #[
       { name := "users", columns := #[
-          { name := "id", datatype := Datatype.datatype Basetype.integer false },
-          { name := "name", datatype := Datatype.datatype Basetype.integer false },
+          { name := "id", datatype := Datatype.datatype Basetype.integer true },
+          { name := "name", datatype := Datatype.datatype Basetype.integer true },
           { name := "email", datatype := Datatype.datatype Basetype.text true },
           { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
         ]
       },
       { name := "posts", columns := #[
-          { name := "id", datatype := Datatype.datatype Basetype.integer true },
-          { name := "user_id", datatype := Datatype.datatype Basetype.integer true },
+          { name := "id", datatype := Datatype.datatype Basetype.integer false },
+          { name := "user_id", datatype := Datatype.datatype Basetype.integer false },
           { name := "title", datatype := Datatype.datatype (Basetype.varchar 10) true },
           { name := "content", datatype := Datatype.datatype (Basetype.varchar 20) true },
           { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
