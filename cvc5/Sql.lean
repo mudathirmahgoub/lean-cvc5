@@ -5,10 +5,7 @@
 -- Abdo: should this be an inductive or a structure?
 --       consider using `PlainDateTime`. Though, it's more precise (includes nanoseconds)
 
-inductive TimePart where
-  | Year
-  | Month
-  | Day
+inductive TimePart where | Year | Month  | Day
   | Hour
   | Minute
   | Second
@@ -83,9 +80,7 @@ def DatabaseSchema.getTable? (schema : DatabaseSchema) (tableName : String) : Op
   schema.tables.find? (fun t => t.name == tableName)
 
 
-inductive Semantics where
-  | bag : Semantics
-  | set : Semantics
+inductive Semantics where | bag | set
 
 
 inductive TableOp where

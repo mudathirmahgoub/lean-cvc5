@@ -43,7 +43,7 @@ def getProductKind (e: Env) : cvc5.Kind :=
   | .bag => .TABLE_PRODUCT
   | .set => .RELATION_PRODUCT
 
-def translateBasetype? (e: Env) (b: Basetype) : Option cvc5.Sort :=
+def translateBasetype (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
   | .bigint => e.tm.getIntegerSort
   | .integer => e.tm.getIntegerSort
@@ -53,7 +53,7 @@ def translateBasetype? (e: Env) (b: Basetype) : Option cvc5.Sort :=
 
 def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
   let .datatype base isNullable := d
-  let s := translateBasetype? e base
+  let s := translateBasetype e base
   match isNullable with
   | false => s
   | true => match s with
@@ -96,7 +96,9 @@ def declareTable (e: Env) (table: Table) : Env :=
   | none => e
   | some (except, _) => match except with
     | .error _ => e
-    | .ok t => { e with map := e.map.insert table.name t }
+    | .ok t =>
+      dbg_trace s!"(declare-const {t} {t.getSort})";
+      { e with map := e.map.insert table.name t }
 
 def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
   d.tables.foldl declareTable e
@@ -497,18 +499,12 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
 end
 
 
-def verify (e: Env) (q1 q2: TableExpr) : IO Unit := do
+def equivalenceFormula (e: Env) (q1 q2: TableExpr) : cvc5.Term :=
   let q1' := translateTableExpr e q1 |>.get!
-  dbg_trace s!"q1: {q1'}"
   let q2' := translateTableExpr e q2 |>.get!
-  dbg_trace s!"q2: {q2'}"
   let formula := mkTableOp e .DISTINCT q1' q2'
-  dbg_trace s!"formula: {formula}"
-  IO.println s!""
-  let _ ← e.s.assertFormula formula
-  let (r, _) ← e.s.checkSat
-  let result := r |>.toOption
-  IO.println s!"{result}"
+  dbg_trace s!"(assert {formula})";
+  formula
 
 
 def test1 := do
@@ -745,18 +741,20 @@ def testProjectUnion (isBag : Bool) := do
 --#eval testProjectUnion true
 --#eval testProjectUnion false
 
-def testVerify (isBag : Bool) : IO Unit := do
+def testVerify (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let s2 ← s.setLogic "HO_ALL"
+  let s3 ← s2.snd.setOption "dag-thresh" "0"
+  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
   let q1 : TableExpr := .tableOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
   let q2 := q1
-  verify z q1 q2
+  let formula := equivalenceFormula z q1 q2
+  return formula
 
 
 #eval testVerify true
