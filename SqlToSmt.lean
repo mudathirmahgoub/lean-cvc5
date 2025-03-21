@@ -499,9 +499,10 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
 end
 
 
-def equivalenceFormula (e: Env) (q1 q2: TableExpr) : cvc5.Term :=
-  let q1' := translateTableExpr e q1 |>.get!
-  let q2' := translateTableExpr e q2 |>.get!
+def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: TableExpr) : cvc5.Term :=
+  let e' := translateSchema e d
+  let q1' := translateTableExpr e' q1 |>.get!
+  let q2' := translateTableExpr e' q2 |>.get!
   let formula := mkTableOp e .DISTINCT q1' q2'
   dbg_trace s!"(assert {formula})";
   formula
@@ -747,13 +748,12 @@ def testVerify (isBag : Bool) := do
   let s2 ← s.setLogic "HO_ALL"
   let s3 ← s2.snd.setOption "dag-thresh" "0"
   let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
-  let z := translateSchema e schema
   let q1 : TableExpr := .tableOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
   let q2 := q1
-  let formula := equivalenceFormula z q1 q2
+  let formula := equivalenceFormula e schema q1 q2
   return formula
 
 
