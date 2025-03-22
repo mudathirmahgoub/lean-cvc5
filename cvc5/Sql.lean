@@ -63,7 +63,7 @@ inductive Datatype where
 
 
 structure Column where
-  name : String
+  index : Nat
   datatype : Datatype
   deriving Repr
 

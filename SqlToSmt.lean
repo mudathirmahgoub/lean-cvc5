@@ -524,18 +524,18 @@ def test1 := do
 def schema : DatabaseSchema :=
   { tables := #[
       { name := "users", columns := #[
-          { name := "id", datatype := Datatype.datatype Basetype.integer true },
-          { name := "name", datatype := Datatype.datatype Basetype.integer true },
-          { name := "email", datatype := Datatype.datatype Basetype.text true },
-          { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
+          { index := 0, datatype := Datatype.datatype Basetype.integer true },
+          { index := 1, datatype := Datatype.datatype Basetype.integer true },
+          { index := 2, datatype := Datatype.datatype Basetype.text true },
+          { index := 3, datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
         ]
       },
       { name := "posts", columns := #[
-          { name := "id", datatype := Datatype.datatype Basetype.integer false },
-          { name := "user_id", datatype := Datatype.datatype Basetype.integer false },
-          { name := "title", datatype := Datatype.datatype (Basetype.varchar 10) true },
-          { name := "content", datatype := Datatype.datatype (Basetype.varchar 20) true },
-          { name := "created_at", datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
+          { index := 0, datatype := Datatype.datatype Basetype.integer false },
+          { index := 1, datatype := Datatype.datatype Basetype.integer false },
+          { index := 2, datatype := Datatype.datatype (Basetype.varchar 10) true },
+          { index := 3, datatype := Datatype.datatype (Basetype.varchar 20) true },
+          { index := 4, datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
         ]
       }
     ]
