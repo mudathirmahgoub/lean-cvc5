@@ -23,6 +23,11 @@ instance : ToString (HashMap String cvc5.Term) where
   toString e := printHashMap e
 
 
+def getUnionAllKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => Kind.BAG_UNION_DISJOINT
+  | .set => Kind.SET_UNION
+
 def getMapKind (e: Env) : cvc5.Kind :=
   match e.semantics with
   | .bag => .BAG_MAP
@@ -304,19 +309,18 @@ partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
 
 partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Array Datatype): Option cvc5.Term :=
   let tuples := rows.map (fun row =>
-  let elements := row.map (fun expr => translateScalarExpr e (e.tm.mkInteger 0) expr) |>.filterMap id
-  e.tm.mkTuple! elements)
+    let null:= (cvc5.Term.null .unit)
+    let f := (fun expr => translateScalarExpr e null expr)
+                          let elements := row.map f |>.filterMap id
+                          e.tm.mkTuple! elements)
   let sorts := types.map (fun t => translateDatatype e t) |>.filterMap id
   let tupleSort := e.tm.mkTupleSort! sorts
   let tableSort := mkTableSort e tupleSort
   let emptyTable := mkEmptyTable e tableSort
-  let unionKind := match e.semantics with
-    | .bag => Kind.BAG_UNION_DISJOINT
-    | .set => Kind.SET_UNION
-  tuples.foldl (fun table tuple =>
+  let combine := fun (table : Option cvc5.Term) (tuple : cvc5.Term)  =>
     let singleton := mkSingleton e tuple
-    e.tm.mkTerm! unionKind #[table.get!, singleton]
-  ) emptyTable
+    some (e.tm.mkTerm! (getUnionAllKind e) #[table.get!, singleton])
+  tuples.foldl combine emptyTable
 
 partial def translateFilter (e: Env) (condition: ScalarExpr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
@@ -355,9 +359,9 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: Query) : Option
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
-  let (tupleSort,projectKind) := match e.semantics with
-    | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT)
-    | .set =>  (query'.getSort.getSetElementSort!, Kind.RELATION_PROJECT)
+  let (tupleSort) := match e.semantics with
+    | .bag =>  (query'.getSort.getBagElementSort!)
+    | .set =>  (query'.getSort.getSetElementSort!)
 --dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
@@ -369,7 +373,7 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) :
     | .column i => i
     | _ => panic! "not an indexed column")
 --dbg_trace s!"indices: {indices}";
-  let op := e.tm.mkOpOfIndices projectKind indices |>.toOption.get!
+  let op := e.tm.mkOpOfIndices (getProjectKind e) indices |>.toOption.get!
 --dbg_trace s!"op: {op}";
 --dbg_trace s!"query: {repr query}";
 --dbg_trace s!"query': {query'}";
@@ -635,8 +639,8 @@ def testValues (isBag : Bool) := do
   let w := translateQuery z t
   return w
 
---#eval testValues true
---#eval testValues false
+#eval testValues true
+#eval testValues false
 
 def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
