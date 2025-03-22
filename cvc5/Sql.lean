@@ -50,7 +50,7 @@ inductive TimePart where | Year | Month  | Day
   | timeWithTimeZone (precision : Nat)
   | timestampWithoutTimeZone (precision : Nat)
   | timestampWithTimeZone (precision : Nat)
-  | tsTableExpr
+  | tsQuery
   | tsvector
   | txid_snapshot
   | uuid
@@ -100,13 +100,13 @@ inductive Join where
   deriving Repr
 
 mutual
-inductive TableExpr where
-  | baseTable (name : String) : TableExpr
-  | project (expr: Array ScalarExpr) (query: TableExpr) : TableExpr
-  | join (l: TableExpr) (r: TableExpr) (join : Join) (condition: ScalarExpr) : TableExpr
-  | filter (condition: ScalarExpr) (query: TableExpr) : TableExpr
-  | tableOperation (op: TableOp) (l: TableExpr) (r: TableExpr) : TableExpr
-  | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : TableExpr
+inductive Query where
+  | baseTable (name : String) : Query
+  | project (expr: Array ScalarExpr) (query: Query) : Query
+  | join (l: Query) (r: Query) (join : Join) (condition: ScalarExpr) : Query
+  | filter (condition: ScalarExpr) (query: Query) : Query
+  | tableOperation (op: TableOp) (l: Query) (r: Query) : Query
+  | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : Query
   deriving Repr
 
 inductive ScalarExpr : Type where
@@ -115,7 +115,7 @@ inductive ScalarExpr : Type where
   | intLiteral (value : Int) : ScalarExpr
   | boolLiteral (value : Bool) : ScalarExpr
   | nullLiteral (type : Basetype) : ScalarExpr
-  | exists (tableExpr : TableExpr) : ScalarExpr
+  | exists (Query : Query) : ScalarExpr
   | application (function : String) (args : Array ScalarExpr) : ScalarExpr
   deriving Repr
 

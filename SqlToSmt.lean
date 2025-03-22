@@ -289,8 +289,8 @@ def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
 
 
 mutual
-partial def translateTableExpr (e: Env) (tableExpr: TableExpr) : Option cvc5.Term :=
-  match tableExpr with
+partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
+  match Query with
   | .baseTable name =>
     -- dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}";
     e.map[name]?
@@ -318,8 +318,8 @@ partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Ar
     e.tm.mkTerm! unionKind #[table.get!, singleton]
   ) emptyTable
 
-partial def translateFilter (e: Env) (condition: ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
-  let query' := translateTableExpr e query |>.get!
+partial def translateFilter (e: Env) (condition: ScalarExpr) (query: Query) : Option cvc5.Term :=
+  let query' := translateQuery e query |>.get!
   let tupleSort := match e.semantics with
     | .bag =>  query'.getSort.getBagElementSort!
     | .set =>  query'.getSort.getSetElementSort!
@@ -335,9 +335,9 @@ partial def translateFilter (e: Env) (condition: ScalarExpr) (query: TableExpr) 
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
   e.tm.mkTerm! (getFilterKind e) #[lambda, query']
 
-partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Option cvc5.Term :=
-  let l' := translateTableExpr e l
-  let r' := translateTableExpr e r
+partial def translateTableOperation (e: Env) (op: TableOp) (l r: Query) : Option cvc5.Term :=
+  let l' := translateQuery e l
+  let r' := translateQuery e r
   match op, e.semantics with
   | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!)]
   | .unionAll,.bag => mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
@@ -352,8 +352,8 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: TableExpr) : Op
   | .intersect, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
   | .intersectAll, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
 
-partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExpr) : Option cvc5.Term :=
-  let query' := translateTableExpr e query |>.get!
+partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) : Option cvc5.Term :=
+  let query' := translateQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
   let (tupleSort,projectKind) := match e.semantics with
     | .bag =>  (query'.getSort.getBagElementSort!, Kind.TABLE_PROJECT)
@@ -383,9 +383,9 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: TableExp
 --dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
-partial def translateJoin (e: Env) (l: TableExpr) (r: TableExpr) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
-  let l' := translateTableExpr e l |>.get!
-  let r' := translateTableExpr e r |>.get!
+partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
+  let l' := translateQuery e l |>.get!
+  let r' := translateQuery e r |>.get!
   let unionKind := match e.semantics with
     | .bag => Kind.BAG_UNION_DISJOINT
     | .set => Kind.SET_UNION
@@ -452,7 +452,7 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
     | .boolean => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
     | .varchar _ => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
     | _ => none
-  | .exists tableExpr => translateTableExpr e tableExpr
+  | .exists Query => translateQuery e Query
   | .application op args =>
     let terms := ((args.map (translateScalarExpr e t)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
@@ -499,10 +499,10 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
 end
 
 
-def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: TableExpr) : cvc5.Term :=
+def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :=
   let e' := translateSchema e d
-  let q1' := translateTableExpr e' q1 |>.get!
-  let q2' := translateTableExpr e' q2 |>.get!
+  let q1' := translateQuery e' q1 |>.get!
+  let q2' := translateQuery e' q2 |>.get!
   let formula := mkTableOp e .DISTINCT q1' q2'
   dbg_trace s!"(assert {formula})";
   formula
@@ -560,8 +560,8 @@ def test3 (isBag : Bool) := do
   let s := (Solver.new tm)
   let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .tableOperation .unionAll  (.baseTable "users") (.baseTable "users")
-  let w := translateTableExpr z t
+  let t : Query := .tableOperation .unionAll  (.baseTable "users") (.baseTable "users")
+  let w := translateQuery z t
   return w
 
 --#eval test3 true
@@ -626,13 +626,13 @@ def testValues (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
+  let t : Query := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
                                 #[.intLiteral 2, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1]]
                                 #[.datatype .integer false,
                                 .datatype (.varchar 20) false,
                                 .datatype (.varchar 20) false,
                                 .datatype .integer false]
-  let w := translateTableExpr z t
+  let w := translateQuery z t
   return w
 
 --#eval testValues true
@@ -644,9 +644,9 @@ def testProjection (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .project #[.column 0, .column 1,
+  let t : Query := .project #[.column 0, .column 1,
   .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
-  let w := translateTableExpr z t
+  let w := translateQuery z t
   return w
 
 --#eval testProjection true
@@ -659,8 +659,8 @@ def testFilter (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
-  let w := translateTableExpr z t
+  let t : Query := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
+  let w := translateQuery z t
   return w
 
 --#eval testFilter true
@@ -673,8 +673,8 @@ def testProduct (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
-  let w := translateTableExpr z t
+  let t : Query := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
+  let w := translateQuery z t
   return w
 
 --#eval testProduct true
@@ -687,8 +687,8 @@ def testLeftJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
-  let w := translateTableExpr z t
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
+  let w := translateQuery z t
   return w
 
 --#eval testLeftJoin true
@@ -701,8 +701,8 @@ def testRightJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .join (.baseTable "users") (.baseTable "posts") .right (.boolLiteral true)
-  let w := translateTableExpr z t
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .right (.boolLiteral true)
+  let w := translateQuery z t
   return w
 
 #eval testRightJoin true
@@ -715,8 +715,8 @@ def testFullJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .join (.baseTable "users") (.baseTable "posts") .full (.boolLiteral true)
-  let w := translateTableExpr z t
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .full (.boolLiteral true)
+  let w := translateQuery z t
   return w
 
 #eval testFullJoin true
@@ -730,12 +730,12 @@ def testProjectUnion (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : TableExpr := .tableOperation
+  let t : Query := .tableOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
 
-  let w := translateTableExpr z t
+  let w := translateQuery z t
   return w
 
 
@@ -748,7 +748,7 @@ def testVerify (isBag : Bool) := do
   let s2 ← s.setLogic "HO_ALL"
   let s3 ← s2.snd.setOption "dag-thresh" "0"
   let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
-  let q1 : TableExpr := .tableOperation
+  let q1 : Query := .tableOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
