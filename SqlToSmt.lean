@@ -97,7 +97,7 @@ def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   |.bag => e.tm.mkBagSort! tupleSort
   |.set => e.tm.mkSetSort! tupleSort
 
-def declareTable (e: Env) (table: Table) : Env :=
+def declareTable (e: Env) (table: BaseTable) : Env :=
   let sorts := table.columns.map (fun c => translateDatatype e c.datatype)
   let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id)
   let tableSort := mkTableSort e tupleSort
@@ -111,7 +111,7 @@ def declareTable (e: Env) (table: Table) : Env :=
       { e with map := e.map.insert table.name t }
 
 def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
-  d.tables.foldl declareTable e
+  d.baseTables.foldl declareTable e
 
 
 def isIntegerOrNullableInteger (t: cvc5.Term) : Bool :=
@@ -276,7 +276,7 @@ def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Arr
   e.tm.mkTerm! (getMapKind e) #[lambda, query]
 
 
-def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
+def mkQueryOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   let aElementSort := getTupleSort e a.getSort
   let bElementSort := getTupleSort e b.getSort
 --dbg_trace s!"op: {op}";
@@ -307,13 +307,13 @@ partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
   | .baseTable name =>
     -- dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}";
     e.map[name]?
+  | .values rows types => translateValues e rows types
   | .project exprs query =>
     -- dbg_trace s!" .project exprs:  query: ";
     translateProject e exprs query
-  | .join l r j c => translateJoin e l r j c
   | .filter condition query  => translateFilter e condition query
-  | .tableOperation op l r => translateTableOperation e op l r
-  | .values rows types => translateValues e rows types
+  | .queryOperation op l r => translateQueryOperation e op l r
+  | .join l r j c => translateJoin e l r j c
 
 partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Array Datatype): Option cvc5.Term :=
   let tuples := rows.map (fun row =>
@@ -345,34 +345,34 @@ partial def translateFilter (e: Env) (condition: ScalarExpr) (query: Query) : Op
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
   e.tm.mkTerm! (getFilterKind e) #[lambda, query']
 
-partial def translateTableOperation (e: Env) (op: TableOp) (l r: Query) : Option cvc5.Term :=
+partial def translateQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option cvc5.Term :=
   let l' := translateQuery e l
   let r' := translateQuery e r
   match op, e.semantics with
-  | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!)]
-  | .unionAll,.bag => mkTableOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
-  | .union, .set => mkTableOp e .SET_UNION  l'.get! r'.get!
-  | .unionAll,.set => mkTableOp e .SET_UNION  l'.get! r'.get!
-  | .minus, .bag => mkTableOp e .BAG_DIFFERENCE_SUBTRACT  (e.tm.mkTerm! .BAG_SETOF #[l'.get!]) r'.get!
-  | .minusAll,.bag => mkTableOp e .BAG_DIFFERENCE_SUBTRACT  l'.get! r'.get!
-  | .minus, .set => mkTableOp e .SET_MINUS  l'.get! r'.get!
-  | .minusAll,.set => mkTableOp e .SET_MINUS  l'.get! r'.get!
-  | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(mkTableOp e .BAG_INTER_MIN  l'.get! r'.get!)]
-  | .intersectAll, .bag => mkTableOp e .BAG_INTER_MIN  l'.get! r'.get!
-  | .intersect, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
-  | .intersectAll, .set => mkTableOp e .SET_INTER  l'.get! r'.get!
+  | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(mkQueryOp e .BAG_UNION_DISJOINT  l'.get! r'.get!)]
+  | .unionAll,.bag => mkQueryOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
+  | .union, .set => mkQueryOp e .SET_UNION  l'.get! r'.get!
+  | .unionAll,.set => mkQueryOp e .SET_UNION  l'.get! r'.get!
+  | .minus, .bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  (e.tm.mkTerm! .BAG_SETOF #[l'.get!]) r'.get!
+  | .minusAll,.bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  l'.get! r'.get!
+  | .minus, .set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
+  | .minusAll,.set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
+  | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(mkQueryOp e .BAG_INTER_MIN  l'.get! r'.get!)]
+  | .intersectAll, .bag => mkQueryOp e .BAG_INTER_MIN  l'.get! r'.get!
+  | .intersect, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
+  | .intersectAll, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
 
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
   let tupleSort := getTupleSort e query'.getSort
 --dbg_trace s!"tupleSort: {tupleSort}";
-  let isTableProject := exprs.all (fun x => match x with
+  let isProject := exprs.all (fun x => match x with
     | .column _ => true
     | _ => false)
---dbg_trace s!"isTableProject: {isTableProject}";
+--dbg_trace s!"isProject: {isProject}";
 --dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
-  if isTableProject then
+  if isProject then
   let indices := exprs.map (fun x => match x with
     | .column i => i
     | _ => panic! "not an indexed column")
@@ -421,17 +421,17 @@ partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition
     let left := mkLeft e l' product'
   --dbg_trace s!"left: {left}";
     -- let join := e.tm.mkTerm! unionKind #[product', left]
-    let join := mkTableOp e unionKind product' left
+    let join := mkQueryOp e unionKind product' left
     join
   | .right =>
     let right := mkRight e r' product'
-    let join := mkTableOp e unionKind product' right
+    let join := mkQueryOp e unionKind product' right
     join
   | .full =>
     let left := mkLeft e l' product'
     let right:= mkRight e r' product'
-    let join := mkTableOp e unionKind left right
-    let join' := mkTableOp e unionKind product' join
+    let join := mkQueryOp e unionKind left right
+    let join' := mkQueryOp e unionKind product' join
     join'
 
 
@@ -509,7 +509,7 @@ def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :
   let e' := translateSchema e d
   let q1' := translateQuery e' q1 |>.get!
   let q2' := translateQuery e' q2 |>.get!
-  let formula := mkTableOp e .DISTINCT q1' q2'
+  let formula := mkQueryOp e .DISTINCT q1' q2'
   dbg_trace s!"(assert {formula})";
   formula
 
@@ -528,7 +528,7 @@ def test1 := do
 
 
 def schema : DatabaseSchema :=
-  { tables := #[
+  { baseTables := #[
       { name := "users", columns := #[
           { index := 0, datatype := Datatype.datatype Basetype.integer true },
           { index := 1, datatype := Datatype.datatype Basetype.integer true },
@@ -547,7 +547,7 @@ def schema : DatabaseSchema :=
     ]
   }
 
-instance : Inhabited Table where
+instance : Inhabited BaseTable where
   default := { name := "", columns := #[] }
 
 def test2 (isBag : Bool) := do
@@ -566,7 +566,7 @@ def test3 (isBag : Bool) := do
   let s := (Solver.new tm)
   let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : Query := .tableOperation .unionAll  (.baseTable "users") (.baseTable "users")
+  let t : Query := .queryOperation .unionAll  (.baseTable "users") (.baseTable "users")
   let w := translateQuery z t
   return w
 
@@ -736,7 +736,7 @@ def testProjectUnion (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
   let z := translateSchema e schema
-  let t : Query := .tableOperation
+  let t : Query := .queryOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
@@ -754,7 +754,7 @@ def testVerify (isBag : Bool) := do
   let s2 ← s.setLogic "HO_ALL"
   let s3 ← s2.snd.setOption "dag-thresh" "0"
   let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
-  let q1 : Query := .tableOperation
+  let q1 : Query := .queryOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))

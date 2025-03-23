@@ -67,23 +67,19 @@ structure Column where
   datatype : Datatype
   deriving Repr
 
-structure Table where
+structure BaseTable where
   name : String
   columns : Array Column
   deriving Repr
 
 structure DatabaseSchema where
-  tables : Array Table
+  baseTables : Array BaseTable
   deriving Repr
-
-def DatabaseSchema.getTable? (schema : DatabaseSchema) (tableName : String) : Option Table :=
-  schema.tables.find? (fun t => t.name == tableName)
-
 
 inductive Semantics where | bag | set
 
 
-inductive TableOp where
+inductive QueryOp where
   | union
   | unionAll
   | intersect
@@ -105,7 +101,7 @@ inductive Query where
   | project (expr: Array ScalarExpr) (query: Query) : Query
   | join (l: Query) (r: Query) (join : Join) (condition: ScalarExpr) : Query
   | filter (condition: ScalarExpr) (query: Query) : Query
-  | tableOperation (op: TableOp) (l: Query) (r: Query) : Query
+  | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
   | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : Query
   deriving Repr
 
