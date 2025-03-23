@@ -23,6 +23,11 @@ instance : ToString (HashMap String cvc5.Term) where
   toString e := printHashMap e
 
 
+def getTupleSort (e : Env) (tableSort : cvc5.Sort) : cvc5.Sort :=
+  match e.semantics with
+  | .bag => tableSort.getBagElementSort!
+  | .set => tableSort.getSetElementSort!
+
 def getUnionAllKind (e: Env) : cvc5.Kind :=
   match e.semantics with
   | .bag => Kind.BAG_UNION_DISJOINT
@@ -188,9 +193,11 @@ def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
   if s.isNullable then s else e.tm.mkNullableSort! s
 
 def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
-  let (aSort, productSort, differenceKind) := match e.semantics with
-    | .bag => (a.getSort.getBagElementSort!, product.getSort.getBagElementSort!, Kind.BAG_DIFFERENCE_REMOVE)
-    | .set => (a.getSort.getSetElementSort!, product.getSort.getSetElementSort!, Kind.SET_MINUS)
+  let aSort := getTupleSort e a.getSort
+  let productSort := getTupleSort e product.getSort
+  let differenceKind := match e.semantics with
+    | .bag => Kind.BAG_DIFFERENCE_REMOVE
+    | .set => Kind.SET_MINUS
   let (aTupleLength, productTupleLength) := (aSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aIndices := getIndices aTupleLength
 -- dbg_trace s!"aIndices: {aIndices}";
@@ -221,9 +228,11 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
 
 
 def mkRight (e: Env) (b product: cvc5.Term) : cvc5.Term :=
-  let (bSort, productSort, differenceKind) := match e.semantics with
-    | .bag => (b.getSort.getBagElementSort!, product.getSort.getBagElementSort!, Kind.BAG_DIFFERENCE_REMOVE)
-    | .set => (b.getSort.getSetElementSort!, product.getSort.getSetElementSort!, Kind.SET_MINUS)
+  let bSort := getTupleSort e b.getSort
+  let productSort := getTupleSort e product.getSort
+  let differenceKind := match e.semantics with
+    | .bag => Kind.BAG_DIFFERENCE_REMOVE
+    | .set => Kind.SET_MINUS
 -- dbg_trace s!"b: {b}";
   let (bTupleLength, productTupleLength) := (bSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aTupleLength := productTupleLength - bTupleLength;
@@ -268,9 +277,8 @@ def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Arr
 
 
 def mkTableOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
-  let (aElementSort, bElementSort) := match e.semantics with
-    | .bag => (a.getSort.getBagElementSort!, b.getSort.getBagElementSort!)
-    | .set => (a.getSort.getSetElementSort!, b.getSort.getSetElementSort!)
+  let aElementSort := getTupleSort e a.getSort
+  let bElementSort := getTupleSort e b.getSort
 --dbg_trace s!"op: {op}";
   let aSorts := aElementSort.getTupleSorts!
   let bSorts := bElementSort.getTupleSorts!
@@ -324,9 +332,7 @@ partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Ar
 
 partial def translateFilter (e: Env) (condition: ScalarExpr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
-  let tupleSort := match e.semantics with
-    | .bag =>  query'.getSort.getBagElementSort!
-    | .set =>  query'.getSort.getSetElementSort!
+  let tupleSort := getTupleSort e query'.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let condition' := translateScalarExpr e t condition |>.get!
   let predicate := if condition'.getSort.isNullable
@@ -359,9 +365,7 @@ partial def translateTableOperation (e: Env) (op: TableOp) (l r: Query) : Option
 partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
-  let (tupleSort) := match e.semantics with
-    | .bag =>  (query'.getSort.getBagElementSort!)
-    | .set =>  (query'.getSort.getSetElementSort!)
+  let tupleSort := getTupleSort e query'.getSort
 --dbg_trace s!"tupleSort: {tupleSort}";
   let isTableProject := exprs.all (fun x => match x with
     | .column _ => true
@@ -394,9 +398,7 @@ partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition
     | .bag => Kind.BAG_UNION_DISJOINT
     | .set => Kind.SET_UNION
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
-  let tupleSort := match e.semantics with
-    | .bag => product.getSort.getBagElementSort!
-    | .set => product.getSort.getSetElementSort!
+  let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let condition' := translateScalarExpr e t condition |>.get!
   -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
@@ -762,3 +764,4 @@ def testVerify (isBag : Bool) := do
 
 
 #eval testVerify true
+#eval testVerify false
