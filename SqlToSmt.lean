@@ -394,9 +394,7 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) :
 partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
   let l' := translateQuery e l |>.get!
   let r' := translateQuery e r |>.get!
-  let unionKind := match e.semantics with
-    | .bag => Kind.BAG_UNION_DISJOINT
-    | .set => Kind.SET_UNION
+  let unionKind := getUnionAllKind e
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
