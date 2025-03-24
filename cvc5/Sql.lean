@@ -98,21 +98,22 @@ inductive Join where
 mutual
 inductive Query where
   | baseTable (name : String) : Query
-  | project (expr: Array ScalarExpr) (query: Query) : Query
-  | join (l: Query) (r: Query) (join : Join) (condition: ScalarExpr) : Query
-  | filter (condition: ScalarExpr) (query: Query) : Query
+  | project (expr: Array Expr) (query: Query) : Query
+  | join (l: Query) (r: Query) (join : Join) (condition: Expr) : Query
+  | filter (condition: Expr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
-  | values (rows: Array (Array ScalarExpr)) (types: Array Datatype) : Query
+  | values (rows: Array (Array Expr)) (types: Array Datatype) : Query
   deriving Repr
 
-inductive ScalarExpr : Type where
-  | column (index : Nat) : ScalarExpr
-  | stringLiteral (value : String) : ScalarExpr
-  | intLiteral (value : Int) : ScalarExpr
-  | boolLiteral (value : Bool) : ScalarExpr
-  | nullLiteral (type : Basetype) : ScalarExpr
-  | exists (Query : Query) : ScalarExpr
-  | application (function : String) (args : Array ScalarExpr) : ScalarExpr
+inductive Expr : Type where
+  | column (index : Nat) : Expr
+  | stringLiteral (value : String) : Expr
+  | intLiteral (value : Int) : Expr
+  | boolLiteral (value : Bool) : Expr
+  | nullLiteral (type : Basetype) : Expr
+  | exists (Query : Query) : Expr
+  | case (condition thenExpr elseExpr: Expr) : Expr
+  | application (function : String) (args : Array Expr) : Expr
   deriving Repr
 
 end
@@ -135,7 +136,7 @@ instance : ToString Basetype where
     | .date => "date"
     | _ => s!"sql type"
 
-instance : ToString ScalarExpr where
+instance : ToString Expr where
   toString
     | .column index => s!"column({index})"
     | .stringLiteral value => s!"stringLiteral(\"{value}\")"
@@ -145,6 +146,6 @@ instance : ToString ScalarExpr where
     | _ => s!"not supported yet"
 
 
-instance : ToString (Array ScalarExpr) where
+instance : ToString (Array Expr) where
   toString arr :=
     "[" ++ String.intercalate ", " (arr.toList.map toString) ++ "]"

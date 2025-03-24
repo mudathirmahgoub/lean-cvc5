@@ -53,6 +53,11 @@ def getProductKind (e: Env) : cvc5.Kind :=
   | .bag => .TABLE_PRODUCT
   | .set => .RELATION_PRODUCT
 
+def getDifferenceRemoveKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => Kind.BAG_DIFFERENCE_REMOVE
+  | .set => Kind.SET_MINUS
+
 def translateBasetype (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
   | .bigint => e.tm.getIntegerSort
@@ -195,9 +200,7 @@ def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
 def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
   let aSort := getTupleSort e a.getSort
   let productSort := getTupleSort e product.getSort
-  let differenceKind := match e.semantics with
-    | .bag => Kind.BAG_DIFFERENCE_REMOVE
-    | .set => Kind.SET_MINUS
+  let differenceKind := getDifferenceRemoveKind e
   let (aTupleLength, productTupleLength) := (aSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aIndices := getIndices aTupleLength
 -- dbg_trace s!"aIndices: {aIndices}";
@@ -230,9 +233,7 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
 def mkRight (e: Env) (b product: cvc5.Term) : cvc5.Term :=
   let bSort := getTupleSort e b.getSort
   let productSort := getTupleSort e product.getSort
-  let differenceKind := match e.semantics with
-    | .bag => Kind.BAG_DIFFERENCE_REMOVE
-    | .set => Kind.SET_MINUS
+  let differenceKind := getDifferenceRemoveKind e
 -- dbg_trace s!"b: {b}";
   let (bTupleLength, productTupleLength) := (bSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aTupleLength := productTupleLength - bTupleLength;
@@ -300,6 +301,12 @@ def mkQueryOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
 --dbg_trace s!"b': {b'}";
   e.tm.mkTerm! op #[a', b']
 
+def isNotEmpty (e: Env) (t : cvc5.Term) : Option cvc5.Term :=
+  let empty := match e.semantics with
+  | .bag => e.tm.mkEmptyBag! t.getSort
+  | .set => e.tm.mkEmptySet! t.getSort
+  let notEmpty := e.tm.mkTerm! .DISTINCT #[t,empty]
+  notEmpty
 
 mutual
 partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
@@ -315,10 +322,10 @@ partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
   | .queryOperation op l r => translateQueryOperation e op l r
   | .join l r j c => translateJoin e l r j c
 
-partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Array Datatype): Option cvc5.Term :=
+partial def translateValues (e: Env) (rows: Array (Array Expr)) (types: Array Datatype): Option cvc5.Term :=
   let tuples := rows.map (fun row =>
     let null:= (cvc5.Term.null .unit)
-    let f := (fun expr => translateScalarExpr e null expr)
+    let f := (fun expr => translateExpr e null expr)
                           let elements := row.map f |>.filterMap id
                           e.tm.mkTuple! elements)
   let sorts := types.map (fun t => translateDatatype e t) |>.filterMap id
@@ -330,11 +337,11 @@ partial def translateValues (e: Env) (rows: Array (Array ScalarExpr)) (types: Ar
     some (e.tm.mkTerm! (getUnionAllKind e) #[table.get!, singleton])
   tuples.foldl combine emptyTable
 
-partial def translateFilter (e: Env) (condition: ScalarExpr) (query: Query) : Option cvc5.Term :=
+partial def translateFilter (e: Env) (condition: Expr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
   let tupleSort := getTupleSort e query'.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := translateScalarExpr e t condition |>.get!
+  let condition' := translateExpr e t condition |>.get!
   let predicate := if condition'.getSort.isNullable
                 then
                 let isSome := e.tm.mkNullableIsSome! condition'
@@ -362,7 +369,7 @@ partial def translateQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option
   | .intersect, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
   | .intersectAll, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
 
-partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) : Option cvc5.Term :=
+partial def translateProject (e: Env) (exprs: Array Expr) (query: Query) : Option cvc5.Term :=
   let query' := translateQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
   let tupleSort := getTupleSort e query'.getSort
@@ -391,14 +398,14 @@ partial def translateProject (e: Env) (exprs: Array ScalarExpr) (query: Query) :
 --dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
-partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: ScalarExpr) : Option cvc5.Term :=
+partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: Expr) : Option cvc5.Term :=
   let l' := translateQuery e l |>.get!
   let r' := translateQuery e r |>.get!
   let unionKind := getUnionAllKind e
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := translateScalarExpr e t condition |>.get!
+  let condition' := translateExpr e t condition |>.get!
   -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
   -- let value := simplified.getBooleanValue!
   -- let product' :=
@@ -433,8 +440,8 @@ partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition
     join'
 
 
-partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term) : Option cvc5.Term :=
-  let terms := exprs.map (fun expr => translateScalarExpr e t expr)
+partial def translateTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Option cvc5.Term :=
+  let terms := exprs.map (fun expr => translateExpr e t expr)
   if terms.any (fun t => t.isNone) then none
   else
   let
@@ -444,7 +451,7 @@ partial def translateTupleExpr (e: Env) (exprs: Array ScalarExpr) (t : cvc5.Term
   lambda
 
 
-partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option cvc5.Term :=
+partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
   match s with
   | .column index => mkTupleSelect e t.getSort t index
   | .stringLiteral v => e.tm.mkString v |>.toOption
@@ -456,16 +463,33 @@ partial def translateScalarExpr (e: Env) (t: cvc5.Term) (s: ScalarExpr): Option 
     | .boolean => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
     | .varchar _ => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
     | _ => none
-  | .exists Query => translateQuery e Query
+  | .exists query =>
+    let query' := (translateQuery e query) |>.get!
+    isNotEmpty e query'
+  | .case condition thenExpr elseExpr  =>
+    let terms := ((#[condition, thenExpr, elseExpr].map (translateExpr e t)).filterMap id)
+    --dbg_trace s!"terms: {terms}";
+    let thenTerm := terms[1]!
+    let elseTerm := terms[2]!
+    let thenElse := #[thenTerm, elseTerm]
+    let needsLifting := thenElse.any (fun x => x.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then thenElse.map (fun x => if x.getSort.isNullable then x else e.tm.mkNullableSome! x)
+      else thenElse
+    --dbg_trace s!"nullableTerms: {nullableTerms}";
+    let condition' := if terms[0]!.getSort.isNullable then
+                       (e.tm.mkNullableIsSome! terms[0]!).and! (e.tm.mkNullableVal! terms[0]!)
+                      else  terms[0]!
+    e.tm.mkTerm! .ITE (#[condition'] ++ nullableTerms)
   | .application op args =>
-    let terms := ((args.map (translateScalarExpr e t)).filterMap id)
+    let terms := ((args.map (translateExpr e t)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
     let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
       else terms
     match op with
-    | "=" => e.tm.mkTerm! .EQUAL terms
-    | "<>" => e.tm.mkTerm! .DISTINCT terms
+    | "=" => liftIfNullable e needsLifting .EQUAL nullableTerms
+    | "<>" => liftIfNullable e needsLifting .DISTINCT nullableTerms
     | "+" => liftIfNullable e needsLifting .ADD nullableTerms
     | "-" => liftIfNullable e needsLifting .SUB nullableTerms
     | "*" => liftIfNullable e needsLifting .MULT nullableTerms
@@ -577,11 +601,11 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
-  let nullLiteral := ScalarExpr.nullLiteral .boolean
-  let x := ScalarExpr.boolLiteral value
-  let andExpr := ScalarExpr.application op #[nullLiteral, x]
+  let nullLiteral := Expr.nullLiteral .boolean
+  let x := Expr.boolLiteral value
+  let andExpr := Expr.application op #[nullLiteral, x]
   let query := (e.tm.mkBoolean true)
-  let z : Option cvc5.Term := translateScalarExpr e query andExpr
+  let z : Option cvc5.Term := translateExpr e query andExpr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -607,10 +631,10 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e := Env.mk tm s2.snd HashMap.empty .bag
-  let x := ScalarExpr.boolLiteral value
-  let expr := ScalarExpr.application op #[x]
+  let x := Expr.boolLiteral value
+  let expr := Expr.application op #[x]
   let query := (e.tm.mkBoolean true)
-  let z : Option cvc5.Term := translateScalarExpr e query expr
+  let z : Option cvc5.Term := translateExpr e query expr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -622,6 +646,8 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
 --#eval test5 true false "NOT"
 --#eval test5 false true "NOT"
 --#eval test5 true true "NOT"
+
+
 
 
 def testValues (isBag : Bool) := do
@@ -756,10 +782,59 @@ def testVerify (isBag : Bool) := do
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
-  let q2 := q1
+  let q2 : Query := .queryOperation
+    .unionAll
+    (.project #[.column 0, .column 1] (.baseTable "posts"))
+    (.project #[.column 0, .column 1] (.baseTable "users"))
   let formula := equivalenceFormula e schema q1 q2
   return formula
 
 
 #eval testVerify true
 #eval testVerify false
+
+
+def testExists (isBag : Bool) := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setLogic "HO_ALL"
+  let s3 ← s2.snd.setOption "dag-thresh" "0"
+  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
+  let users : Query := (.baseTable "users")
+  let q1 : Query := .filter ( .boolLiteral true) users
+  let q2 : Query := .filter ( .exists users) users
+  let formula := equivalenceFormula e schema q1 q2
+  return formula
+
+
+#eval testExists true
+#eval testExists false
+
+
+def schema2 : DatabaseSchema :=
+  { baseTables := #[
+      { name := "users", columns := #[
+          { index := 0, datatype := Datatype.datatype Basetype.boolean true },
+          { index := 1, datatype := Datatype.datatype Basetype.integer true },
+          { index := 2, datatype := Datatype.datatype Basetype.integer false }
+        ]
+      }
+    ]
+  }
+
+def testCaseStatement  := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e := Env.mk tm s2.snd HashMap.empty .set
+  let x := Expr.column 0
+  let y := Expr.column 1
+  let z := Expr.column 2
+  let case1 := Expr.case x y z
+  let case2 := Expr.case (.application "AND" #[x,.boolLiteral true]) y z
+  let q1 : Query := .project #[case1] (.baseTable "users")
+  let q2 : Query := .project #[case2] (.baseTable "users")
+  let formula := equivalenceFormula e schema2 q1 q2
+  return formula
+
+#eval testCaseStatement
