@@ -14,6 +14,20 @@ structure Env where
   constraints: Array cvc5.Term := #[]
 
 
+
+def getIndices (n : Nat) : Array Nat :=
+  Array.mkArray n 0 |>.mapIdx (fun i _ => i)
+
+def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
+  match e.semantics with
+  | .bag => e.tm.mkEmptyBag! s
+  | .set => e.tm.mkEmptySet! s
+
+def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
+  match e.semantics with
+  | .bag => e.tm.mkTerm! .BAG_MAKE #[tuple, e.tm.mkInteger 1]
+  | .set => e.tm.mkTerm! .SET_SINGLETON #[tuple]
+
 def printHashMap (map : HashMap String cvc5.Term) : String :=
   map.fold (fun acc key value =>
     acc ++ s!"{toString key}: {toString value} {toString value.getSort}\n"
@@ -126,13 +140,31 @@ def declareTable (e: Env) (table: BaseTable) : Env :=
   let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id)
   let tableSort := mkTableSort e tupleSort
   let tableTerm := e.s.declareFun table.name #[] tableSort
-  match tableTerm with
-  | none => e
-  | some (except, _) => match except with
-    | .error _ => e
-    | .ok t =>
-      dbg_trace s!"(declare-const {t} {t.getSort})";
-      { e with map := e.map.insert table.name t }
+  let t := match tableTerm with
+    | some (except, _) => except.toOption.get!
+    | none => panic! "tableTerm is none"
+  dbg_trace s!"(declare-const {t} {t.getSort})";
+  let bound := match e.n with
+  | none => e.tm.mkBoolean true
+  | some m =>
+   let indices := getIndices m
+   let elements := indices.mapIdx (fun i x =>
+     let const := e.s.declareFun s!"{table.name}_{i}" #[] tupleSort
+     match const with
+     | some (except, _) =>
+       let z := except.toOption.get!
+       dbg_trace s!"(declare-const {z} {z.getSort})";
+       z
+     | none => panic! "tableTerm is none"
+     )
+   let unionAll := elements.foldl
+                  (fun a b => e.tm.mkTerm! (getUnionAllKind e) #[a, mkSingleton e b])
+                  (mkEmptyTable e t.getSort)
+   let subset := e.tm.mkTerm! (getSubsetKind e) #[t, unionAll]
+   let distinct := e.tm.mkTerm! .DISTINCT elements
+   distinct.and! subset
+  dbg_trace s!"(assert {bound})";
+  { e with map := e.map.insert table.name t }
 
 
 
@@ -196,18 +228,7 @@ def testDefineFun := do
 
 --#eval testDefineFun
 
-def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
-  match e.semantics with
-  | .bag => e.tm.mkEmptyBag! s
-  | .set => e.tm.mkEmptySet! s
 
-def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
-  match e.semantics with
-  | .bag => e.tm.mkTerm! .BAG_MAKE #[tuple, e.tm.mkInteger 1]
-  | .set => e.tm.mkTerm! .SET_SINGLETON #[tuple]
-
-def getIndices (n : Nat) : Array Nat :=
-  Array.mkArray n 0 |>.mapIdx (fun i _ => i)
 
 --#eval getIndices 5
 
@@ -981,7 +1002,7 @@ def testConstraints  := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e: Env := {tm:= tm, s := s2.snd, semantics := .set}
+  let e: Env := {tm:= tm, s := s2.snd, semantics := .set, n:= some 3}
   let e' := translateSchema e schema3
   return e'
 
