@@ -129,36 +129,70 @@ def declareTable (e: Env) (table: BaseTable) : Env :=
       dbg_trace s!"(declare-const {t} {t.getSort})";
       { e with map := e.map.insert table.name t }
 
+
+def translateUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let table := e.map[baseTable]!
+  let sort := getTupleSort e table.getSort
+  let x := e.tm.mkVar sort "x" |>.toOption.get!
+  let y := e.tm.mkVar sort "y" |>.toOption.get!
+  let equalities := columns.map (fun i =>
+    let xElement := mkTupleSelect e sort x i
+    let yElement := mkTupleSelect e sort y i
+    let xSort := xElement.getSort
+    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
+    if xSort.isNullable then
+      let xSome := e.tm.mkNullableIsSome! xElement
+      let ySome := e.tm.mkNullableIsSome! yElement
+      (xSome.and! ySome).and! equal
+    else equal
+    )
+  let premise := equalities.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
+  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
+  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
+  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
+  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
+  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
+  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
+  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
+  dbg_trace s!"(assert {xAll})";
+  xAll
+
+def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let table := e.map[baseTable]!
+  let sort := getTupleSort e table.getSort
+  let x := e.tm.mkVar sort "x" |>.toOption.get!
+  let y := e.tm.mkVar sort "y" |>.toOption.get!
+  let equalities := columns.map (fun i =>
+    let xElement := mkTupleSelect e sort x i
+    let yElement := mkTupleSelect e sort y i
+    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
+    (equal, xElement)) |>.unzip
+  let premise := equalities.fst.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+  let notNull := equalities.snd.foldl (fun a b =>
+    if b.getSort.isNullable
+    then a.and! (e.tm.mkNullableIsSome! b)
+    else a) (e.tm.mkBoolean true)
+  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
+  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
+  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
+  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
+  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
+  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
+  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
+  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
+  let xNotNull := e.tm.mkTerm! .LAMBDA #[xList, notNull]
+  let xAllNotNull := e.tm.mkTerm! (getAllKind e) #[xNotNull, table]
+  let and := xAllNotNull.and! xAll
+  dbg_trace s!"(assert {and})";
+  and
+
 def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
   match c with
-  | .unique name baseTable columns =>
-    dbg_trace s!";; {name}";
-    let table := e.map[baseTable]!
-    let sort := getTupleSort e table.getSort
-    let x := e.tm.mkVar sort "x" |>.toOption.get!
-    let y := e.tm.mkVar sort "y" |>.toOption.get!
-    let equalities := columns.map (fun i =>
-      let xElement := mkTupleSelect e sort x i
-      let yElement := mkTupleSelect e sort y i
-      let xSort := xElement.getSort
-      let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
-      if xSort.isNullable then
-        let xSome := e.tm.mkNullableIsSome! xElement
-        let ySome := e.tm.mkNullableIsSome! yElement
-        (xSome.and! ySome).and! equal
-      else equal
-      )
-    let premise := equalities.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
-    let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
-    let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
-    let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
-    let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
-    let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
-    let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
-    let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
-    let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
-    dbg_trace s!"(assert {xAll})";
-    xAll
+  | .unique name baseTable columns => translateUnique e name baseTable columns
+  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
   | _ => e.tm.mkInteger 0
 
 def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
@@ -898,7 +932,9 @@ def schema3 : DatabaseSchema :=
         ]
       }
     ],
-    constraints := #[.unique "uq" "users" #[0,1]]
+    constraints := #[
+      .unique "uq" "users" #[0,1],
+      .primaryKey "pq" "users" #[0,1]]
   }
 
 def testConstraints  := do
