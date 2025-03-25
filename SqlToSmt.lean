@@ -135,110 +135,6 @@ def declareTable (e: Env) (table: BaseTable) : Env :=
       { e with map := e.map.insert table.name t }
 
 
-def translateUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
-  dbg_trace s!";; {name}";
-  let table := e.map[baseTable]!
-  let sort := getTupleSort e table.getSort
-  let x := e.tm.mkVar sort "x" |>.toOption.get!
-  let y := e.tm.mkVar sort "y" |>.toOption.get!
-  let equalities := columns.map (fun i =>
-    let xElement := mkTupleSelect e sort x i
-    let yElement := mkTupleSelect e sort y i
-    let xSort := xElement.getSort
-    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
-    if xSort.isNullable then
-      let xSome := e.tm.mkNullableIsSome! xElement
-      let ySome := e.tm.mkNullableIsSome! yElement
-      (xSome.and! ySome).and! equal
-    else equal
-    )
-  let premise := equalities.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
-  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
-  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
-  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
-  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
-  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
-  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
-  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
-  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
-  dbg_trace s!"(assert {xAll})";
-  xAll
-
-def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
-  dbg_trace s!";; {name}";
-  let table := e.map[baseTable]!
-  let sort := getTupleSort e table.getSort
-  let x := e.tm.mkVar sort "x" |>.toOption.get!
-  let y := e.tm.mkVar sort "y" |>.toOption.get!
-  let equalities := columns.map (fun i =>
-    let xElement := mkTupleSelect e sort x i
-    let yElement := mkTupleSelect e sort y i
-    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
-    (equal, xElement)) |>.unzip
-  let premise := equalities.fst.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
-  let notNull := equalities.snd.foldl (fun a b =>
-    if b.getSort.isNullable
-    then a.and! (e.tm.mkNullableIsSome! b)
-    else a) (e.tm.mkBoolean true)
-  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
-  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
-  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
-  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
-  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
-  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
-  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
-  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
-  let xNotNull := e.tm.mkTerm! .LAMBDA #[xList, notNull]
-  let xAllNotNull := e.tm.mkTerm! (getAllKind e) #[xNotNull, table]
-  let and := xAllNotNull.and! xAll
-  dbg_trace s!"(assert {and})";
-  and
-
-def translateForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
-  dbg_trace s!";; {name}";
-  let (childTerm, parentTerm) := (e.map[child]!,e.map[parent]!)
-  let childTupleSort := getTupleSort e childTerm.getSort
-  let parentTupleSort := getTupleSort e parentTerm.getSort
-  let childSorts := childTupleSort.getTupleSorts!
-  let filter : Array Nat → cvc5.Term → cvc5.Term :=
-    fun indices table =>
-    let sort := getTupleSort e table.getSort
-    let t := e.tm.mkVar sort "t" |>.toOption.get!
-    let sorts := t.getSort.getTupleSorts!
-    let keySorts := indices.map (fun i => sorts[i]!)
-    if keySorts.any (fun s => s.isNullable)
-    then
-      let terms := indices.map (fun i =>
-          let select := mkTupleSelect e sort t i
-          if sorts[i]!.isNullable then
-            e.tm.mkNullableIsSome! select
-          else e.tm.mkBoolean true)
-      let body := terms.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
-      let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
-      let lambda := e.tm.mkTerm! .LAMBDA #[boundList, body]
-      e.tm.mkTerm! (getFilterKind e) #[lambda, table]
-    else table
-  let childFilter := filter childColumns childTerm
-  let parentFilter := filter parentColumns parentTerm
-  let childOp := e.tm.mkOpOfIndices (getProjectKind e) childColumns |>.toOption.get!
-  let parentOp := e.tm.mkOpOfIndices (getProjectKind e) parentColumns |>.toOption.get!
-  let childProject := e.tm.mkTermOfOp childOp #[childFilter] |>.toOption.get!
-  let parentProject := e.tm.mkTermOfOp parentOp #[parentFilter] |>.toOption.get!
-  e.tm.mkTerm! (getSubsetKind e) #[childProject, parentProject]
-
-def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
-  match c with
-  | .unique name baseTable columns => translateUnique e name baseTable columns
-  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
-  | .foreignKey name child parent childColumns parentColumns =>
-     translateForeign e name child parent childColumns parentColumns
-
-def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
-  let e' := d.baseTables.foldl declareTable e
-  let constraints := d.constraints.map (fun c => translateConstraint e' c)
-  let e'' := {e' with constraints := constraints}
-  e''
-
 
 def isIntegerOrNullableInteger (t: cvc5.Term) : Bool :=
   t.getSort.isInteger ||
@@ -428,6 +324,111 @@ def isNotEmpty (e: Env) (t : cvc5.Term) : Option cvc5.Term :=
   | .set => e.tm.mkEmptySet! t.getSort
   let notEmpty := e.tm.mkTerm! .DISTINCT #[t,empty]
   notEmpty
+
+def translateUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let table := e.map[baseTable]!
+  let sort := getTupleSort e table.getSort
+  let x := e.tm.mkVar sort "x" |>.toOption.get!
+  let y := e.tm.mkVar sort "y" |>.toOption.get!
+  let equalities := columns.map (fun i =>
+    let xElement := mkTupleSelect e sort x i
+    let yElement := mkTupleSelect e sort y i
+    let xSort := xElement.getSort
+    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
+    if xSort.isNullable then
+      let xSome := e.tm.mkNullableIsSome! xElement
+      let ySome := e.tm.mkNullableIsSome! yElement
+      (xSome.and! ySome).and! equal
+    else equal
+    )
+  let premise := equalities.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
+  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
+  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
+  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
+  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
+  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
+  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
+  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
+  dbg_trace s!"(assert {xAll})";
+  xAll
+
+def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let table := e.map[baseTable]!
+  let sort := getTupleSort e table.getSort
+  let x := e.tm.mkVar sort "x" |>.toOption.get!
+  let y := e.tm.mkVar sort "y" |>.toOption.get!
+  let equalities := columns.map (fun i =>
+    let xElement := mkTupleSelect e sort x i
+    let yElement := mkTupleSelect e sort y i
+    let equal := e.tm.mkTerm! .EQUAL #[xElement,yElement]
+    (equal, xElement)) |>.unzip
+  let premise := equalities.fst.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+  let notNull := equalities.snd.foldl (fun a b =>
+    if b.getSort.isNullable
+    then a.and! (e.tm.mkNullableIsSome! b)
+    else a) (e.tm.mkBoolean true)
+  let conclusion := e.tm.mkTerm! .EQUAL #[x,y]
+  let implies := e.tm.mkTerm! .IMPLIES #[premise, conclusion]
+  let yList := e.tm.mkTerm! .VARIABLE_LIST #[y]
+  let yLambda := e.tm.mkTerm! .LAMBDA #[yList, implies]
+  let yAll := e.tm.mkTerm! (getAllKind e) #[yLambda, table]
+  let xList := e.tm.mkTerm! .VARIABLE_LIST #[x]
+  let xLambda := e.tm.mkTerm! .LAMBDA #[xList, yAll]
+  let xAll := e.tm.mkTerm! (getAllKind e) #[xLambda, table]
+  let xNotNull := e.tm.mkTerm! .LAMBDA #[xList, notNull]
+  let xAllNotNull := e.tm.mkTerm! (getAllKind e) #[xNotNull, table]
+  let and := xAllNotNull.and! xAll
+  dbg_trace s!"(assert {and})";
+  and
+
+def translateForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let (childTerm, parentTerm) := (e.map[child]!,e.map[parent]!)
+  let filter : Array Nat → cvc5.Term → cvc5.Term :=
+    fun indices table =>
+    let sort := getTupleSort e table.getSort
+    let t := e.tm.mkVar sort "t" |>.toOption.get!
+    let sorts := t.getSort.getTupleSorts!
+    let keySorts := indices.map (fun i => sorts[i]!)
+    if keySorts.any (fun s => s.isNullable)
+    then
+      let terms := indices.map (fun i =>
+          let select := mkTupleSelect e sort t i
+          if sorts[i]!.isNullable then
+            e.tm.mkNullableIsSome! select
+          else e.tm.mkBoolean true)
+      let body := terms.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+      let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+      let lambda := e.tm.mkTerm! .LAMBDA #[boundList, body]
+      e.tm.mkTerm! (getFilterKind e) #[lambda, table]
+    else table
+  let childFilter := filter childColumns childTerm
+  let parentFilter := filter parentColumns parentTerm
+  let childOp := e.tm.mkOpOfIndices (getProjectKind e) childColumns |>.toOption.get!
+  let parentOp := e.tm.mkOpOfIndices (getProjectKind e) parentColumns |>.toOption.get!
+  let childProject := e.tm.mkTermOfOp childOp #[childFilter] |>.toOption.get!
+  let parentProject := e.tm.mkTermOfOp parentOp #[parentFilter] |>.toOption.get!
+  let subset := mkQueryOp e (getSubsetKind e) childProject parentProject
+  dbg_trace s!"(assert {subset})"
+  subset
+
+
+def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
+  match c with
+  | .unique name baseTable columns => translateUnique e name baseTable columns
+  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
+  | .foreignKey name child parent childColumns parentColumns =>
+     translateForeign e name child parent childColumns parentColumns
+
+def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
+  let e' := d.baseTables.foldl declareTable e
+  let constraints := d.constraints.map (fun c => translateConstraint e' c)
+  let e'' := {e' with constraints := constraints}
+  e''
+
 
 mutual
 partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
@@ -972,7 +973,8 @@ def schema3 : DatabaseSchema :=
     ],
     constraints := #[
       .unique "uq" "users" #[0,1],
-      .primaryKey "pq" "users" #[0,1]]
+      .primaryKey "pq" "users" #[0,1],
+      .foreignKey "fk" "users" "users" #[0,1] #[0,1]]
   }
 
 def testConstraints  := do
