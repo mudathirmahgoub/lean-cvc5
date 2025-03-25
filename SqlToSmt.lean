@@ -10,6 +10,8 @@ structure Env where
   s: Solver
   map: HashMap String cvc5.Term
   semantics : Semantics
+  n : (Option Nat) := none
+
 
 def printHashMap (map : HashMap String cvc5.Term) : String :=
   map.fold (fun acc key value =>
@@ -87,7 +89,7 @@ def testTupleSelect := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let e := Env.mk tm s2.snd HashMap.empty .bag .none
   let s := e.tm.mkString! "hello" false
   let t := e.tm.mkTuple! #[e.tm.mkInteger 1, s]
   let s := mkTupleSelect e t.getSort t 1
@@ -173,7 +175,7 @@ def testDefineFun := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let e := Env.mk tm s2.snd HashMap.empty .bag .none
   let z := defineFun e
   return z
 
@@ -539,7 +541,7 @@ def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :
 def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty .bag
+  let e := Env.mk tm s HashMap.empty .bag .none
   let x := translateDatatype e (.datatype .boolean true)
   let y := tm.mkTupleSort! #[x.get!]
   let tTuple := tm.mkNullableSome! (tm.mkBoolean true)
@@ -575,7 +577,7 @@ instance : Inhabited BaseTable where
 def test2 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   return z.map
 
@@ -586,7 +588,7 @@ def test2 (isBag : Bool) := do
 def test3 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
-  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .queryOperation .unionAll  (.baseTable "users") (.baseTable "users")
   let w := translateQuery z t
@@ -600,7 +602,7 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let e := Env.mk tm s2.snd HashMap.empty .bag .none
   let nullLiteral := Expr.nullLiteral .boolean
   let x := Expr.boolLiteral value
   let andExpr := Expr.application op #[nullLiteral, x]
@@ -630,7 +632,7 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .bag
+  let e := Env.mk tm s2.snd HashMap.empty .bag .none
   let x := Expr.boolLiteral value
   let expr := Expr.application op #[x]
   let query := (e.tm.mkBoolean true)
@@ -654,7 +656,7 @@ def testValues (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
                                 #[.intLiteral 2, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1]]
@@ -672,7 +674,7 @@ def testProjection (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .project #[.column 0, .column 1,
   .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
@@ -687,7 +689,7 @@ def testFilter (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
   let w := translateQuery z t
@@ -701,7 +703,7 @@ def testProduct (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
   let w := translateQuery z t
@@ -715,7 +717,7 @@ def testLeftJoin (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
   let w := translateQuery z t
@@ -729,7 +731,7 @@ def testRightJoin (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .right (.boolLiteral true)
   let w := translateQuery z t
@@ -743,7 +745,7 @@ def testFullJoin (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .full (.boolLiteral true)
   let w := translateQuery z t
@@ -758,7 +760,7 @@ def testProjectUnion (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s2.snd HashMap.empty (if isBag then .bag else .set) .none
   let z := translateSchema e schema
   let t : Query := .queryOperation
     .unionAll
@@ -777,7 +779,7 @@ def testVerify (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setLogic "HO_ALL"
   let s3 ← s2.snd.setOption "dag-thresh" "0"
-  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set) .none
   let q1 : Query := .queryOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
@@ -799,7 +801,7 @@ def testExists (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setLogic "HO_ALL"
   let s3 ← s2.snd.setOption "dag-thresh" "0"
-  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set)
+  let e := Env.mk tm s3.snd HashMap.empty (if isBag then .bag else .set) .none
   let users : Query := (.baseTable "users")
   let q1 : Query := .filter ( .boolLiteral true) users
   let q2 : Query := .filter ( .exists users) users
@@ -826,7 +828,7 @@ def testCaseStatement  := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e := Env.mk tm s2.snd HashMap.empty .set
+  let e := Env.mk tm s2.snd HashMap.empty .set .none
   let x := Expr.column 0
   let y := Expr.column 1
   let z := Expr.column 2
