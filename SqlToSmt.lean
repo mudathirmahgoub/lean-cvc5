@@ -61,6 +61,11 @@ def getDifferenceRemoveKind (e: Env) : cvc5.Kind :=
   | .bag => Kind.BAG_DIFFERENCE_REMOVE
   | .set => Kind.SET_MINUS
 
+def getSubsetKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => Kind.BAG_SUBBAG
+  | .set => Kind.SET_SUBSET
+
 def getAllKind (e: Env) : cvc5.Kind :=
   match e.semantics with
   | .set => .SET_ALL
@@ -189,11 +194,44 @@ def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : c
   dbg_trace s!"(assert {and})";
   and
 
+def translateForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let (childTerm, parentTerm) := (e.map[child]!,e.map[parent]!)
+  let childTupleSort := getTupleSort e childTerm.getSort
+  let parentTupleSort := getTupleSort e parentTerm.getSort
+  let childSorts := childTupleSort.getTupleSorts!
+  let filter : Array Nat → cvc5.Term → cvc5.Term :=
+    fun indices table =>
+    let sort := getTupleSort e table.getSort
+    let t := e.tm.mkVar sort "t" |>.toOption.get!
+    let sorts := t.getSort.getTupleSorts!
+    let keySorts := indices.map (fun i => sorts[i]!)
+    if keySorts.any (fun s => s.isNullable)
+    then
+      let terms := indices.map (fun i =>
+          let select := mkTupleSelect e sort t i
+          if sorts[i]!.isNullable then
+            e.tm.mkNullableIsSome! select
+          else e.tm.mkBoolean true)
+      let body := terms.foldl (fun a b => a.and! b) (e.tm.mkBoolean true)
+      let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+      let lambda := e.tm.mkTerm! .LAMBDA #[boundList, body]
+      e.tm.mkTerm! (getFilterKind e) #[lambda, table]
+    else table
+  let childFilter := filter childColumns childTerm
+  let parentFilter := filter parentColumns parentTerm
+  let childOp := e.tm.mkOpOfIndices (getProjectKind e) childColumns |>.toOption.get!
+  let parentOp := e.tm.mkOpOfIndices (getProjectKind e) parentColumns |>.toOption.get!
+  let childProject := e.tm.mkTermOfOp childOp #[childFilter] |>.toOption.get!
+  let parentProject := e.tm.mkTermOfOp parentOp #[parentFilter] |>.toOption.get!
+  e.tm.mkTerm! (getSubsetKind e) #[childProject, parentProject]
+
 def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
   match c with
   | .unique name baseTable columns => translateUnique e name baseTable columns
   | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
-  | _ => e.tm.mkInteger 0
+  | .foreignKey name child parent childColumns parentColumns =>
+     translateForeign e name child parent childColumns parentColumns
 
 def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
   let e' := d.baseTables.foldl declareTable e
