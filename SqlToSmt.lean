@@ -965,8 +965,8 @@ def testCaseStatement  := do
 def schema3 : DatabaseSchema :=
   { baseTables := #[
       { name := "users", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.boolean true },
-          { index := 1, datatype := Datatype.datatype Basetype.integer true },
+          { index := 0, datatype := Datatype.datatype Basetype.integer true },
+          { index := 1, datatype := Datatype.datatype Basetype.integer false },
           { index := 2, datatype := Datatype.datatype Basetype.integer false }
         ]
       }
@@ -974,7 +974,7 @@ def schema3 : DatabaseSchema :=
     constraints := #[
       .unique "uq" "users" #[0,1],
       .primaryKey "pq" "users" #[0,1],
-      .foreignKey "fk" "users" "users" #[0,1] #[0,1]]
+      .foreignKey "fk" "users" "users" #[0,1] #[1,0]]
   }
 
 def testConstraints  := do
