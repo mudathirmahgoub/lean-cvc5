@@ -437,18 +437,6 @@ def translateForeign (e : Env) (name child parent : String) (childColumns parent
   subset
 
 
-def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
-  match c with
-  | .unique name baseTable columns => translateUnique e name baseTable columns
-  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
-  | .foreignKey name child parent childColumns parentColumns =>
-     translateForeign e name child parent childColumns parentColumns
-
-def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
-  let e' := d.baseTables.foldl declareTable e
-  let constraints := d.constraints.map (fun c => translateConstraint e' c)
-  let e'' := {e' with constraints := constraints}
-  e''
 
 
 mutual
@@ -669,6 +657,37 @@ partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
     | _ => none
 
 end
+
+def translateCheck (e : Env) (name baseTable : String) (expr : Expr): cvc5.Term :=
+  dbg_trace s!";; {name}";
+  let table := e.map[baseTable]!
+  let t := e.tm.mkVar (getTupleSort e table.getSort) "t" |>.toOption.get!
+  let expr' := translateExpr e t expr |>.get!
+  let expr'' := if expr'.getSort.isNullable
+    then
+      let isSome := e.tm.mkNullableIsSome! expr'
+      e.tm.mkTerm! .IMPLIES #[isSome, e.tm.mkNullableVal! expr']
+    else expr'
+  let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
+  let lambda := e.tm.mkTerm! .LAMBDA #[boundList, expr'']
+  let all := e.tm.mkTerm! (getAllKind e) #[lambda, table]
+  dbg_trace s!"(assert {all})"
+  all
+
+def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
+  match c with
+  | .unique name baseTable columns => translateUnique e name baseTable columns
+  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
+  | .foreignKey name child parent childColumns parentColumns =>
+     translateForeign e name child parent childColumns parentColumns
+  | .check name baseTable expr => translateCheck e name baseTable expr
+
+def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
+  let e' := d.baseTables.foldl declareTable e
+  let constraints := d.constraints.map (fun c => translateConstraint e' c)
+  let e'' := {e' with constraints := constraints}
+  e''
+
 
 
 def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :=
@@ -1002,7 +1021,9 @@ def schema3 : DatabaseSchema :=
     constraints := #[
       .unique "uq" "users" #[0,1],
       .primaryKey "pq" "users" #[0,1],
-      .foreignKey "fk" "child" "users" #[0,1] #[1,0]]
+      .foreignKey "fk" "child" "users" #[0,1] #[1,0],
+      .check "ck" "users" (.application ">" #[.column 0, .intLiteral 0])
+    ]
   }
 
 def testConstraints  := do

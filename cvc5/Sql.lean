@@ -73,17 +73,6 @@ structure BaseTable where
   deriving Repr
 
 
-inductive Constraint where
-  | unique (name baseTable : String) (columns :Array Nat) : Constraint
-  | primaryKey  (name baseTable : String) (columns :Array Nat) : Constraint
-  | foreignKey (name child parent : String) (childColumns parentColumns :Array Nat) : Constraint
-   deriving Repr
-
-structure DatabaseSchema where
-  baseTables : Array BaseTable
-  constraints : Array Constraint := #[]
-  deriving Repr
-
 inductive Semantics where | bag | set
 
 
@@ -126,6 +115,17 @@ inductive Expr : Type where
 
 end
 
+inductive Constraint where
+  | unique (name baseTable : String) (columns :Array Nat) : Constraint
+  | primaryKey  (name baseTable : String) (columns :Array Nat) : Constraint
+  | foreignKey (name child parent : String) (childColumns parentColumns :Array Nat) : Constraint
+  | check (name baseTable : String) (expr :Expr) : Constraint
+   deriving Repr
+
+structure DatabaseSchema where
+  baseTables : Array BaseTable
+  constraints : Array Constraint := #[]
+  deriving Repr
 
 
 instance : ToString Basetype where
