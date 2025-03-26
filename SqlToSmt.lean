@@ -630,38 +630,39 @@ partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
     let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
       else terms
+    let arg0 := nullableTerms[0]!
     match op with
     | "=" => liftIfNullable e needsLifting .EQUAL nullableTerms
     | "<>" => liftIfNullable e needsLifting .DISTINCT nullableTerms
     | "+" => liftIfNullable e needsLifting .ADD nullableTerms
     | "-" => liftIfNullable e needsLifting .SUB nullableTerms
     | "*" => liftIfNullable e needsLifting .MULT nullableTerms
-    | ">" => if isIntegerOrNullableInteger nullableTerms[0]!
+    | ">" => if isIntegerOrNullableInteger arg0
              then liftIfNullable e needsLifting .GT nullableTerms
-             else liftIfNullable e needsLifting .STRING_LT #[nullableTerms[1]!, nullableTerms[0]!]
-    | "<" => if isIntegerOrNullableInteger nullableTerms[0]!
+             else liftIfNullable e needsLifting .STRING_LT #[nullableTerms[1]!, arg0]
+    | "<" => if isIntegerOrNullableInteger arg0
              then liftIfNullable e needsLifting .LT nullableTerms
              else liftIfNullable e needsLifting .STRING_LT nullableTerms
-    | ">=" => if isIntegerOrNullableInteger nullableTerms[0]!
+    | ">=" => if isIntegerOrNullableInteger arg0
               then liftIfNullable e needsLifting .GEQ nullableTerms
-              else liftIfNullable e needsLifting .STRING_LEQ #[nullableTerms[1]!, nullableTerms[0]!]
-    | "<=" => if isIntegerOrNullableInteger nullableTerms[0]!
+              else liftIfNullable e needsLifting .STRING_LEQ #[nullableTerms[1]!, arg0]
+    | "<=" => if isIntegerOrNullableInteger arg0
               then liftIfNullable e needsLifting .LEQ nullableTerms
               else liftIfNullable e needsLifting .STRING_LEQ nullableTerms
     | "UPPER" => liftIfNullable e needsLifting .STRING_TO_UPPER nullableTerms
     | "||" => liftIfNullable e needsLifting .STRING_CONCAT nullableTerms
     | "IS NULL" => if needsLifting
-                   then e.tm.mkNullableIsNull! nullableTerms[0]!
+                   then e.tm.mkNullableIsNull! arg0
                    else e.tm.mkBoolean false
     | "IS NOT NULL" => if needsLifting
-                   then e.tm.mkNullableIsSome! nullableTerms[0]!
+                   then e.tm.mkNullableIsSome! arg0
                    else e.tm.mkBoolean true
     | "IS TRUE" => if needsLifting
-                   then e.tm.mkNullableVal! nullableTerms[0]!
-                   else nullableTerms[0]!
+                   then (e.tm.mkNullableIsSome! arg0).and! (e.tm.mkNullableVal! arg0)
+                   else arg0
     | "IS NOT TRUE" => if needsLifting
-                   then e.tm.mkTerm! .NOT #[(e.tm.mkNullableVal! nullableTerms[0]!)]
-                   else e.tm.mkTerm! .NOT #[nullableTerms[0]!]
+                   then (e.tm.mkNullableIsNull! arg0).or! (e.tm.mkNullableVal! arg0).not!
+                   else e.tm.mkTerm! .NOT #[arg0]
     | "NOT" => liftIfNullable e needsLifting .NOT nullableTerms
     | "AND" => translateAnd e needsLifting nullableTerms
     | "OR" => translateOr e needsLifting nullableTerms
@@ -990,12 +991,18 @@ def schema3 : DatabaseSchema :=
           { index := 1, datatype := Datatype.datatype Basetype.integer false },
           { index := 2, datatype := Datatype.datatype Basetype.integer false }
         ]
+      },
+      { name := "child", columns := #[
+          { index := 0, datatype := Datatype.datatype Basetype.integer true },
+          { index := 1, datatype := Datatype.datatype Basetype.integer false },
+          { index := 2, datatype := Datatype.datatype Basetype.integer false }
+        ]
       }
     ],
     constraints := #[
       .unique "uq" "users" #[0,1],
       .primaryKey "pq" "users" #[0,1],
-      .foreignKey "fk" "users" "users" #[0,1] #[1,0]]
+      .foreignKey "fk" "child" "users" #[0,1] #[1,0]]
   }
 
 def testConstraints  := do
