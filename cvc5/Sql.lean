@@ -81,8 +81,8 @@ inductive QueryOp where
   | unionAll
   | intersect
   | intersectAll
-  | minus
-  | minusAll
+  | except
+  | exceptAll
   deriving Repr
 
 inductive Join where

@@ -2,6 +2,7 @@ import Std.Data.HashMap
 import cvc5
 import cvc5.Sql
 
+
 open cvc5 (TermManager Solver Kind)
 open Std
 
@@ -491,10 +492,10 @@ partial def translateQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option
   | .unionAll,.bag => mkQueryOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
   | .union, .set => mkQueryOp e .SET_UNION  l'.get! r'.get!
   | .unionAll,.set => mkQueryOp e .SET_UNION  l'.get! r'.get!
-  | .minus, .bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  (e.tm.mkTerm! .BAG_SETOF #[l'.get!]) r'.get!
-  | .minusAll,.bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  l'.get! r'.get!
-  | .minus, .set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
-  | .minusAll,.set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
+  | .except, .bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  (e.tm.mkTerm! .BAG_SETOF #[l'.get!]) r'.get!
+  | .exceptAll,.bag => mkQueryOp e .BAG_DIFFERENCE_SUBTRACT  l'.get! r'.get!
+  | .except, .set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
+  | .exceptAll,.set => mkQueryOp e .SET_MINUS  l'.get! r'.get!
   | .intersect,.bag => e.tm.mkTerm! .BAG_SETOF #[(mkQueryOp e .BAG_INTER_MIN  l'.get! r'.get!)]
   | .intersectAll, .bag => mkQueryOp e .BAG_INTER_MIN  l'.get! r'.get!
   | .intersect, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
@@ -1035,3 +1036,30 @@ def testConstraints  := do
   return e'
 
 #eval testConstraints
+
+#check Int
+#check String
+#check Array Type
+
+def tupleType (q: Query) : Type := sorry
+
+inductive DBValue
+ | boolValue (v: Bool)
+ | intValue (v: Int)
+ | stringValue (v: String)
+
+def DBTable (n:Nat) :=  List (List DBValue)
+
+
+def students : DBTable 3 := [
+ [.boolValue false, .intValue 5, .stringValue "sb"],
+[.boolValue true, .intValue 6, .stringValue "sb"]
+]
+
+
+-- a map from table names to DBTable
+
+def semantics (d: DatabaseInstance) (q : Query) : (List (tupleType q)) :=
+match q with
+| .baseTable name => sorry
+| _ => sorry
