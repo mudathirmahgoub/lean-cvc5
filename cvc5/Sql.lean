@@ -11,60 +11,21 @@ inductive TimePart where | Year | Month  | Day
   | Second
   deriving Repr
 
-  inductive Basetype where
-  | bigint
-  | bigserial
+inductive Basetype where
   | bit (size: Nat)
-  | bitVarying (size: Nat)
   | boolean
-  | box
-  | bytea
-  | character (size: Nat)
   | varchar (size: Nat)
-  | cidr
-  | circle
-  | date
-  | doublePrecision
-  | inet
   | integer
-  | interval (fields : List TimePart) (precision: Nat)
-  | json
-  | jsonb
-  | line
-  | lseg
-  | macaddr
-  | macaddr8
-  | money
-  | numeric (precision significand: Nat)
-  | path
-  | pg_lsn
-  | pg_snapshot
-  | point
-  | polygon
-  | real
-  | smallint
-  | smallserial
-  | serial
-  | text
-  | timeWithoutTimeZone (precision : Nat)
-  | timeWithTimeZone (precision : Nat)
-  | timestampWithoutTimeZone (precision : Nat)
-  | timestampWithTimeZone (precision : Nat)
-  | tsQuery
-  | tsvector
-  | txid_snapshot
-  | uuid
-  | xml
   deriving Repr
 
-inductive Datatype where
+inductive SqlType where
   | datatype (basetype : Basetype) (isNull : Bool)
   deriving Repr
 
 
 structure Column where
   index : Nat
-  datatype : Datatype
+  datatype : SqlType
   deriving Repr
 
 structure BaseTable where
@@ -99,7 +60,58 @@ inductive Query where
   | join (l: Query) (r: Query) (join : Join) (condition: Expr) : Query
   | filter (condition: Expr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
-  | values (rows: Array (Array Expr)) (types: Array Datatype) : Query
+  | values (rows: Array (Array Expr)) (types: Array SqlType) : Query
+  deriving Repr
+
+inductive StringExpr : Type where
+  | column (index : Nat) : StringExpr
+  | stringLiteral (value : String) : StringExpr
+  | nullString : StringExpr
+  | case (condition : BoolExpr) (thenExpr elseExpr: StringExpr) : StringExpr
+  | upper (a : StringExpr) : StringExpr
+  | concat (a b : StringExpr) : StringExpr
+  | substring (a : StringExpr) (start length : Nat) : StringExpr
+  deriving Repr
+
+inductive IntExpr : Type where
+  | column (index : Nat) : IntExpr
+  | intLiteral (value : Int) : IntExpr
+  | nullInt : IntExpr
+  | case (condition : BoolExpr) (thenExpr elseExpr: IntExpr) : IntExpr
+  | plus (a b : IntExpr) : IntExpr
+  | minus (a b : IntExpr) : IntExpr
+  | multiplication (a b : IntExpr) : IntExpr
+  | division (a b : IntExpr) : IntExpr
+  deriving Repr
+
+inductive BoolExpr : Type where
+  | column (index : Nat) : BoolExpr
+  | stringLiteral (value : String) : BoolExpr
+  | nullBool : BoolExpr
+  | intLiteral (value : Int) : BoolExpr
+  | boolLiteral (value : Bool) : BoolExpr
+  | nullLiteral (type : Basetype) : BoolExpr
+  | exists (Query : Query) : BoolExpr
+  | case (condition thenExpr elseExpr: BoolExpr) : BoolExpr
+  | stringEqual (a b : StringExpr) : BoolExpr
+  | intEqual (a b : IntExpr) : BoolExpr
+  | boolEqual (a b : BoolExpr) : BoolExpr
+  | isNullString (a : StringExpr) : BoolExpr
+  | isNotNullString (a : StringExpr) : BoolExpr
+  | isNullInt (a : StringExpr) : BoolExpr
+  | isNotNullInt (a : StringExpr) : BoolExpr
+  | isNullBool (a : StringExpr) : BoolExpr
+  | isNotNullBool (a : StringExpr) : BoolExpr
+  | isTrue (a : BoolExpr) : BoolExpr
+  | isNotTrue (a : BoolExpr) : BoolExpr
+  | lsInt (a b : IntExpr) : BoolExpr
+  | leqInt (a b : IntExpr) : BoolExpr
+  | gtInt (a b : IntExpr) : BoolExpr
+  | geqInt (a b : IntExpr) : BoolExpr
+  | lsString (a b : StringExpr) : BoolExpr
+  | leqString (a b : StringExpr) : BoolExpr
+  | gtString (a b : StringExpr) : BoolExpr
+  | geqString (a b : StringExpr) : BoolExpr
   deriving Repr
 
 inductive Expr : Type where
@@ -130,19 +142,10 @@ structure DatabaseSchema where
 
 instance : ToString Basetype where
   toString
-    | .bigint => "bigint"
-    | .bigserial => "bigserial"
     | .bit size => s!"bit({size})"
-    | .bitVarying size => s!"bit varying({size})"
     | .boolean => "boolean"
-    | .box => "box"
-    | .bytea => "bytea"
-    | .character size => s!"character({size})"
     | .varchar size => s!"varchar({size})"
-    | .cidr => "cidr"
-    | .circle => "circle"
-    | .date => "date"
-    | _ => s!"sql type"
+    | .integer => s!"integer"
 
 instance : ToString Expr where
   toString

@@ -1042,24 +1042,3 @@ def testConstraints  := do
 #check Array Type
 
 def tupleType (q: Query) : Type := sorry
-
-inductive DBValue
- | boolValue (v: Bool)
- | intValue (v: Int)
- | stringValue (v: String)
-
-def DBTable (n:Nat) :=  List (List DBValue)
-
-
-def students : DBTable 3 := [
- [.boolValue false, .intValue 5, .stringValue "sb"],
-[.boolValue true, .intValue 6, .stringValue "sb"]
-]
-
-
--- a map from table names to DBTable
-
-def semantics (d: DatabaseInstance) (q : Query) : (List (tupleType q)) :=
-match q with
-| .baseTable name => sorry
-| _ => sorry
