@@ -85,10 +85,22 @@ partial def List.inter (as bs: DBTable) : DBTable :=
     else if lessThan x y then List.inter xs bs'
     else List.inter as' ys
 
+partial def List.minus (as bs: DBTable) : DBTable :=
+  let as' := List.mergeSort as lessThan
+  let bs' := List.mergeSort bs lessThan
+  match as', bs' with
+  | [], _ => []
+  | xs, [] => xs
+  | x :: xs, y:: ys =>
+    if x == y then List.minus xs ys
+    else if lessThan x y then x::List.minus xs bs'
+    else List.minus as' ys
+
 def t1 : DBTable := [[.intValue 100],[.intValue 10],[.intValue 10],[.intValue 10],[.intValue 15]]
 def t2 : DBTable := [[.intValue 100],[.intValue 10],[.intValue 10],[.intValue 15]]
 
 #eval List.inter t1 t2
+#eval List.minus t1 t2
 
 def DatabaseInstance := HashMap String DBTable
 
@@ -137,8 +149,11 @@ match op with
   | .bag => result
   | .set => removeDuplicates (result)
 | .intersect  => removeDuplicates (l.filter (fun x => List.elem x r))
-| .exceptAll  => removeDuplicates (List.append l r)
 | .except  => (removeDuplicates l).filter (fun x => ¬(List.elem x r))
+| .exceptAll  =>
+  match s with
+  | .bag => List.minus l r
+  | .set => (removeDuplicates l).filter (fun x => ¬(List.elem x r))
 
 def semantics (s : Semantics) (d: DatabaseInstance) (q : Query) : DBTable :=
   match q with
@@ -146,5 +161,5 @@ def semantics (s : Semantics) (d: DatabaseInstance) (q : Query) : DBTable :=
   | .project exprs q => sorry
   | .join l r join condition => sorry
   | .filter condition query => sorry
-  | .queryOperation op l r => semanticsQueryOp s op (semantics d l) (semantics d r)
+  | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
   | .values rows types => sorry
