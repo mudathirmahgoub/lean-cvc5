@@ -135,7 +135,7 @@ def uniqueList := removeDuplicates myList
 
 #eval uniqueList -- Outputs: [1, 2, 3, 4, 5]
 
-def semanticsQueryOp (s : Semantics) (op: QueryOp) (l r : DBTable) : DBTable :=
+def semanticsQueryOp (s : SQLSemantics) (op: QueryOp) (l r : DBTable) : DBTable :=
 match op with
 | .unionAll  =>
   let result := List.append l r
@@ -148,18 +148,35 @@ match op with
   match s with
   | .bag => result
   | .set => removeDuplicates (result)
-| .intersect  => removeDuplicates (l.filter (fun x => List.elem x r))
-| .except  => (removeDuplicates l).filter (fun x => ¬(List.elem x r))
+| .intersect  => removeDuplicates (List.inter l r)
+| .except  => List.minus (removeDuplicates l) r
 | .exceptAll  =>
   match s with
   | .bag => List.minus l r
-  | .set => (removeDuplicates l).filter (fun x => ¬(List.elem x r))
+  | .set => List.minus (removeDuplicates l) r
 
-def semantics (s : Semantics) (d: DatabaseInstance) (q : Query) : DBTable :=
+mutual
+partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : List DBValue → Option Bool :=
+  let noneFun := fun _ => none
+  match expr with
+  | .nullBool => fun _ => none
+  | .boolLiteral v => fun _ => v
+  | .exists q => fun _ => !(semantics s d q).isEmpty
+  | .case c t e => noneFun
+  | _ => noneFun
+
+partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
   match q with
   | .baseTable name => d.get! name
   | .project exprs q => sorry
   | .join l r join condition => sorry
-  | .filter condition query => sorry
+  | .filter condition q =>
+   let q' := (semantics s d q)
+   let p := translateBoolExpr s d condition
+   let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
+   q''
+
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
   | .values rows types => sorry
+
+end

@@ -34,7 +34,7 @@ structure BaseTable where
   deriving Repr
 
 
-inductive Semantics where | bag | set
+inductive SQLSemantics where | bag | set
 
 
 inductive QueryOp where
@@ -58,7 +58,7 @@ inductive Query where
   | baseTable (name : String) : Query
   | project (expr: Array Expr) (query: Query) : Query
   | join (l: Query) (r: Query) (join : Join) (condition: Expr) : Query
-  | filter (condition: Expr) (query: Query) : Query
+  | filter (condition: BoolExpr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
   | values (rows: Array (Array Expr)) (types: Array SqlType) : Query
   deriving Repr
@@ -86,11 +86,8 @@ inductive IntExpr : Type where
 
 inductive BoolExpr : Type where
   | column (index : Nat) : BoolExpr
-  | stringLiteral (value : String) : BoolExpr
   | nullBool : BoolExpr
-  | intLiteral (value : Int) : BoolExpr
   | boolLiteral (value : Bool) : BoolExpr
-  | nullLiteral (type : Basetype) : BoolExpr
   | exists (Query : Query) : BoolExpr
   | case (condition thenExpr elseExpr: BoolExpr) : BoolExpr
   | stringEqual (a b : StringExpr) : BoolExpr
