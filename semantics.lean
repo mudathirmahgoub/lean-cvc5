@@ -17,7 +17,14 @@ inductive DBValue
  | boolValue (v: Bool)
  | intValue (v: Int)
  | stringValue (v: String)
-deriving BEq
+deriving BEq, Repr
+
+def less (a b : DBValue) : Bool :=
+  match a, b with
+  | .boolValue v1, .boolValue v2 => v1 ≤ v2
+  | .intValue v1, .intValue v2 => v1 ≤ v2
+  | .stringValue v1, .stringValue v2 => v1 ≤ v2
+  | _, _ => false
 
 -- def DBTable (n:Nat) := String × List (Vector DBValue n)
 
@@ -37,16 +44,36 @@ deriving BEq
 
 def DBTable := List (List DBValue)
 
+def table : DBTable := [
+  [.boolValue true, .intValue 10, .stringValue "5"],
+  [.boolValue true, .intValue 15, .stringValue "5"],
+  [.boolValue true, .intValue 08, .stringValue "5"]
+  ]
+
+def lessThan (a b : List DBValue) : Bool :=
+ match a,b with
+ | [],[] => true
+ | a::as,b::bs => (less a b) && lessThan as bs
+ | _,_ => true
+
+
+#eval List.mergeSort table lessThan
+
+
 def DatabaseInstance := HashMap String DBTable
 
 
 instance : Inhabited DBTable where
   default := []
 
+instance : Repr (List DBValue) where
+  reprPrec lst _ := repr lst
+
 instance : BEq (List DBValue) where
   beq l1 l2 := l1 == l2
 instance : Inhabited DBTable where
   default := []
+
 
 instance : Hashable DBValue where
   hash
@@ -92,5 +119,5 @@ def semantics (s : Semantics) (d: DatabaseInstance) (q : Query) : DBTable :=
   | .project exprs q => sorry
   | .join l r join condition => sorry
   | .filter condition query => sorry
-  | .queryOperation op l r => semanticsQueryOp s d op (semantics d l) (semantics d r)
+  | .queryOperation op l r => semanticsQueryOp s op (semantics d l) (semantics d r)
   | .values rows types => sorry
