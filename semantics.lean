@@ -42,7 +42,7 @@ def less (a b : DBValue) : Bool :=
 
 -- def DatabaseInstance (tupleLengths: List Nat) := tupleLengths.map (fun x => DBTable x)
 
-def DBTable := List (List DBValue)
+def DBTable := List (List DBValue) deriving BEq, Repr
 
 def table : DBTable := [
   [.boolValue true, .intValue 10, .stringValue "5"],
@@ -54,20 +54,47 @@ def lessThan (a b : List DBValue) : Bool :=
  match a,b with
  | [],[] => true
  | a::as,b::bs => (less a b) && lessThan as bs
- | _,_ => true
+ | [],_ => true
+ | _,[] => false
 
 
 #eval List.mergeSort table lessThan
 
+instance : ToString (DBValue) where
+  toString
+    | .boolValue v => toString v
+    | .intValue v => toString v
+    | .stringValue v => v
+
+instance : ToString (List DBValue) where
+  toString lst := List.toString lst
+
+instance : ToString (DBTable) where
+  toString table := match table with
+  | [] => "[]"
+  | rows => rows.map toString |> String.intercalate "\n"
+
+partial def List.inter (as bs: DBTable) : DBTable :=
+  let as' := List.mergeSort as lessThan
+  let bs' := List.mergeSort bs lessThan
+  match as', bs' with
+  | [], _ => []
+  | _, [] => []
+  | x :: xs, y:: ys =>
+    if x == y then x :: List.inter xs ys
+    else if lessThan x y then List.inter xs bs'
+    else List.inter as' ys
+
+def t1 : DBTable := [[.intValue 100],[.intValue 10],[.intValue 10],[.intValue 10],[.intValue 15]]
+def t2 : DBTable := [[.intValue 100],[.intValue 10],[.intValue 10],[.intValue 15]]
+
+#eval List.inter t1 t2
 
 def DatabaseInstance := HashMap String DBTable
 
 
 instance : Inhabited DBTable where
   default := []
-
-instance : Repr (List DBValue) where
-  reprPrec lst _ := repr lst
 
 instance : BEq (List DBValue) where
   beq l1 l2 := l1 == l2
@@ -105,7 +132,7 @@ match op with
   | .set => removeDuplicates (result)
 | .union  => removeDuplicates (List.append l r)
 | .intersectAll  =>
-  let result := l.filter (fun x => List.elem x r)
+  let result := List.inter l r
   match s with
   | .bag => result
   | .set => removeDuplicates (result)
