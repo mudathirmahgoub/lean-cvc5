@@ -42,7 +42,9 @@ def less (a b : DBValue) : Bool :=
 
 -- def DatabaseInstance (tupleLengths: List Nat) := tupleLengths.map (fun x => DBTable x)
 
-def DBTable := List (List DBValue) deriving BEq, Repr
+
+def DBRow := List DBValue deriving BEq, Repr
+def DBTable := List DBRow deriving BEq, Repr
 
 def table : DBTable := [
   [.boolValue true, .intValue 10, .stringValue "5"],
@@ -50,7 +52,7 @@ def table : DBTable := [
   [.boolValue true, .intValue 08, .stringValue "5"]
   ]
 
-def lessThan (a b : List DBValue) : Bool :=
+def lessThan (a b : DBRow) : Bool :=
  match a,b with
  | [],[] => true
  | a::as,b::bs => (less a b) && lessThan as bs
@@ -66,7 +68,7 @@ instance : ToString (DBValue) where
     | .intValue v => toString v
     | .stringValue v => v
 
-instance : ToString (List DBValue) where
+instance : ToString DBRow where
   toString lst := List.toString lst
 
 instance : ToString (DBTable) where
@@ -108,7 +110,7 @@ def DatabaseInstance := HashMap String DBTable
 instance : Inhabited DBTable where
   default := []
 
-instance : BEq (List DBValue) where
+instance : BEq (DBRow) where
   beq l1 l2 := l1 == l2
 instance : Inhabited DBTable where
   default := []
@@ -120,7 +122,7 @@ instance : Hashable DBValue where
     | .intValue v => hash v
     | .stringValue v => hash v
 
-instance : Hashable (List DBValue) where
+instance : Hashable DBRow where
   hash lst := lst.foldl (fun acc x => mixHash acc (hash x)) 0
 
 
@@ -156,13 +158,21 @@ match op with
   | .set => List.minus (removeDuplicates l) r
 
 mutual
-partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : List DBValue → Option Bool :=
+partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : DBRow → Option Bool :=
   let noneFun := fun _ => none
   match expr with
   | .nullBool => fun _ => none
   | .boolLiteral v => fun _ => v
   | .exists q => fun _ => !(semantics s d q).isEmpty
-  | .case c t e => noneFun
+  | .case c t e =>
+    let c' := translateBoolExpr s d c
+    let t' := translateBoolExpr s d t
+    let e' := translateBoolExpr s d e
+    let isTrue := fun x : DBRow =>
+      let result := (c' x)
+      result.isSome && result.get!
+    let ite := fun y : DBRow => if isTrue y then t' y else e' y
+    ite
   | _ => noneFun
 
 partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
