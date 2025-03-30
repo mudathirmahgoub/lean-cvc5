@@ -185,6 +185,11 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
     let ite := if isTrue x then t' x else e' x
     ite
   | .stringEqual a b => (semanticsStringExpr s d a x) == (semanticsStringExpr s d b x)
+  | .lsInt a b =>
+    let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x < y)
+    | _, _ => none
   | _ => none
 
 partial def semanticsIntExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: IntExpr) : DBRow → Option Int :=
@@ -306,7 +311,10 @@ def table : DBTable := [
 def d: DatabaseInstance := HashMap.empty.insert "table" table
 
 def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table")
-def q2: Query := .project #[.stringExpr (.upper (.column 2))] (.baseTable "table")
+def q2: Query :=
+  let project := .project #[.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.intLiteral 2))] (.baseTable "table")
+  let filter := .filter (.lsInt (.column 1) (.intLiteral 25)) project
+  filter
 #eval q1
 
 #eval semantics .bag d q1
