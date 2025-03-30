@@ -19,6 +19,9 @@ inductive DBValue
  | stringValue (v: String)
 deriving BEq, Repr
 
+instance : Inhabited DBValue where
+  default := DBValue.boolValue false
+
 def less (a b : DBValue) : Bool :=
   match a, b with
   | .boolValue v1, .boolValue v2 => v1 ≤ v2
@@ -46,11 +49,6 @@ def less (a b : DBValue) : Bool :=
 def DBRow := List DBValue deriving BEq, Repr
 def DBTable := List DBRow deriving BEq, Repr
 
-def table : DBTable := [
-  [.boolValue true, .intValue 10, .stringValue "5"],
-  [.boolValue true, .intValue 15, .stringValue "5"],
-  [.boolValue true, .intValue 08, .stringValue "5"]
-  ]
 
 def lessThan (a b : DBRow) : Bool :=
  match a,b with
@@ -59,8 +57,6 @@ def lessThan (a b : DBRow) : Bool :=
  | [],_ => true
  | _,[] => false
 
-
-#eval List.mergeSort table lessThan
 
 instance : ToString (DBValue) where
   toString
@@ -157,10 +153,24 @@ match op with
   | .bag => List.minus l r
   | .set => List.minus (removeDuplicates l) r
 
+instance : ToString BoolExpr where
+  toString expr :=
+    match expr with
+    | .column i => s!"column {i}"
+    | .nullBool => "nullBool"
+    | .boolLiteral v => s!"boolLiteral {v}"
+    -- | .exists q => s!"exists {q}"
+    -- | .case c t e => s!"case {c} {t} {e}"
+    | _ => "unknown"
+
 mutual
 partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : DBRow → Option Bool :=
   let noneFun := fun _ => none
+  dbg_trace s!"expr: {expr}";
   match expr with
+  | .column i => fun x : DBRow => match x.get! i with
+                                  | .boolValue v => some v
+                                  | _ => none
   | .nullBool => fun _ => none
   | .boolLiteral v => fun _ => v
   | .exists q => fun _ => !(semantics s d q).isEmpty
@@ -176,17 +186,37 @@ partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
   | _ => noneFun
 
 partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
+
   match q with
-  | .baseTable name => d.get! name
-  | .project exprs q => sorry
-  | .join l r join condition => sorry
+  | .baseTable name =>
+    dbg_trace s!"q: {d.get! name}"
+    d.get! name
+  | .project exprs q => []
+  | .join l r join condition => []
   | .filter condition q =>
    let q' := (semantics s d q)
+   dbg_trace s!"q': {q'}"
    let p := translateBoolExpr s d condition
    let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
    q''
 
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
-  | .values rows types => sorry
+  | .values rows types => []
 
 end
+
+
+def table : DBTable := [
+  [.boolValue true, .intValue 10, .stringValue "5"],
+  [.boolValue true, .intValue 15, .stringValue "5"],
+  [.boolValue false, .intValue 08, .stringValue "5"]
+  ]
+
+#eval List.mergeSort table lessThan
+
+def d: DatabaseInstance := HashMap.empty.insert "table" table
+
+def q: Query := .filter (BoolExpr.column 0) (.baseTable "table")
+#eval q
+
+#eval semantics .bag d q
