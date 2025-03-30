@@ -184,7 +184,21 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
       result.isSome && result.get!
     let ite := if isTrue x then t' x else e' x
     ite
-  | .stringEqual a b => (semanticsStringExpr s d a x) == (semanticsStringExpr s d b x)
+  | .boolEqual a b =>
+    let (a', b') :=  (semanticsBoolExpr s d a x, semanticsBoolExpr s d b x)
+    match a', b' with
+    | some x, some y => x == y
+    | _, _ => none
+  | .stringEqual a b =>
+    let (a', b') :=  (semanticsStringExpr s d a x, semanticsStringExpr s d b x)
+    match a', b' with
+    | some x, some y => x == y
+    | _, _ => none
+  | .intEqual a b =>
+    let (a', b') :=  (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
+    match a', b' with
+    | some x, some y => x == y
+    | _, _ => none
   | .lsInt a b =>
     let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
     match a', b' with
@@ -249,7 +263,7 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
   | .isNotTrue a =>
     let a' := semanticsBoolExpr s d a x
     a' != some true
-  | _ => none
+
 
 partial def semanticsIntExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: IntExpr) : DBRow → Option Int :=
  fun x : DBRow =>
