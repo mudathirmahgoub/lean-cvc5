@@ -69,6 +69,7 @@ inductive StringExpr : Type where
   | nullString : StringExpr
   | case (condition : BoolExpr) (thenExpr elseExpr: StringExpr) : StringExpr
   | upper (a : StringExpr) : StringExpr
+  | lower (a : StringExpr) : StringExpr
   | concat (a b : StringExpr) : StringExpr
   | substring (a : StringExpr) (start length : Nat) : StringExpr
   deriving Repr

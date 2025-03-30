@@ -133,6 +133,8 @@ def uniqueList := removeDuplicates myList
 
 #eval uniqueList -- Outputs: [1, 2, 3, 4, 5]
 
+#eval Substring.mk "123456789" (String.Pos.mk 0) (String.Pos.mk 4)
+
 def semanticsQueryOp (s : SQLSemantics) (op: QueryOp) (l r : DBTable) : DBTable :=
 match op with
 | .unionAll  =>
@@ -182,7 +184,45 @@ partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
       result.isSome && result.get!
     let ite := if isTrue x then t' x else e' x
     ite
+  | .stringEqual a b => (translateStringExpr s d a x) == (translateStringExpr s d b x)
   | _ => none
+
+partial def translateStringExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: StringExpr) : DBRow → Option String :=
+ fun x : DBRow =>
+ match expr with
+ | .column i => match x.get! i with
+    | .stringValue v => v
+    | _ => none
+ | .nullString => none
+ | .stringLiteral v => v
+ | .upper a =>
+    match translateStringExpr s d a x with
+    | some str => str.toUpper
+    | none => none
+ | .lower a =>
+    match translateStringExpr s d a x with
+    | some str => str.toLower
+    | none => none
+ | .concat a b =>
+    let (a', b') := (translateStringExpr s d a x, translateStringExpr s d b x)
+    match a', b' with
+    | none, _ => none
+    | _, none => none
+    | some c, some d => c.append d
+ | .substring a start length =>
+    match translateStringExpr s d a x with
+    | some str => Substring.mk str (String.Pos.mk (start - 1)) (String.Pos.mk length) |>.toString
+    | _ => none
+ | .case c t e =>
+    let c' := translateBoolExpr s d c
+    let t' := translateStringExpr s d t
+    let e' := translateStringExpr s d e
+    let isTrue := fun y : DBRow =>
+      let result := (c' y)
+      result.isSome && result.get!
+    let ite := if isTrue x then t' x else e' x
+    ite
+
 
 partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
 
