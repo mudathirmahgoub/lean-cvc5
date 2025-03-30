@@ -113,14 +113,9 @@ inductive BoolExpr : Type where
   deriving Repr
 
 inductive Expr : Type where
-  | column (index : Nat) : Expr
-  | stringLiteral (value : String) : Expr
-  | intLiteral (value : Int) : Expr
-  | boolLiteral (value : Bool) : Expr
-  | nullLiteral (type : Basetype) : Expr
-  | exists (Query : Query) : Expr
-  | case (condition thenExpr elseExpr: Expr) : Expr
-  | application (function : String) (args : Array Expr) : Expr
+  | boolExpr (e: BoolExpr) : Expr
+  | stringExpr (e : StringExpr) : Expr
+  | intExpr (e: IntExpr) : Expr
   deriving Repr
 
 end
@@ -147,12 +142,7 @@ instance : ToString Basetype where
 
 instance : ToString Expr where
   toString
-    | .column index => s!"column({index})"
-    | .stringLiteral value => s!"stringLiteral(\"{value}\")"
-    | .intLiteral value => s!"intLiteral({value})"
-    | .boolLiteral value => s!"boolLiteral({value})"
-    | .nullLiteral type => s!"nullLiteral({type})"
-    | _ => s!"not supported yet"
+    | _ => s!"Expr not supported yet"
 
 
 instance : ToString (Array Expr) where
