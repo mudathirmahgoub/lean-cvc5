@@ -165,37 +165,34 @@ instance : ToString BoolExpr where
 
 mutual
 partial def translateBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : DBRow → Option Bool :=
-  let noneFun := fun _ => none
-  dbg_trace s!"expr: {expr}";
+  fun x : DBRow =>
   match expr with
-  | .column i => fun x : DBRow => match x.get! i with
-                                  | .boolValue v => some v
-                                  | _ => none
-  | .nullBool => fun _ => none
-  | .boolLiteral v => fun _ => v
-  | .exists q => fun _ => !(semantics s d q).isEmpty
+  | .column i => match x.get! i with
+    | .boolValue v => some v
+    | _ => none
+  | .nullBool => none
+  | .boolLiteral v => v
+  | .exists q => !(semantics s d q).isEmpty
   | .case c t e =>
     let c' := translateBoolExpr s d c
     let t' := translateBoolExpr s d t
     let e' := translateBoolExpr s d e
-    let isTrue := fun x : DBRow =>
-      let result := (c' x)
+    let isTrue := fun y : DBRow =>
+      let result := (c' y)
       result.isSome && result.get!
-    let ite := fun y : DBRow => if isTrue y then t' y else e' y
+    let ite := if isTrue x then t' x else e' x
     ite
-  | _ => noneFun
+  | _ => none
 
 partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
 
   match q with
   | .baseTable name =>
-    dbg_trace s!"q: {d.get! name}"
     d.get! name
   | .project exprs q => []
   | .join l r join condition => []
   | .filter condition q =>
    let q' := (semantics s d q)
-   dbg_trace s!"q': {q'}"
    let p := translateBoolExpr s d condition
    let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
    q''
