@@ -96,10 +96,10 @@ inductive BoolExpr : Type where
   | boolEqual (a b : BoolExpr) : BoolExpr
   | isNullString (a : StringExpr) : BoolExpr
   | isNotNullString (a : StringExpr) : BoolExpr
-  | isNullInt (a : StringExpr) : BoolExpr
-  | isNotNullInt (a : StringExpr) : BoolExpr
-  | isNullBool (a : StringExpr) : BoolExpr
-  | isNotNullBool (a : StringExpr) : BoolExpr
+  | isNullInt (a : IntExpr) : BoolExpr
+  | isNotNullInt (a : IntExpr) : BoolExpr
+  | isNullBool (a : BoolExpr) : BoolExpr
+  | isNotNullBool (a : BoolExpr) : BoolExpr
   | isTrue (a : BoolExpr) : BoolExpr
   | isNotTrue (a : BoolExpr) : BoolExpr
   | lsInt (a b : IntExpr) : BoolExpr

@@ -190,6 +190,65 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
     match a', b' with
     | some x, some y => some (x < y)
     | _, _ => none
+  | .leqInt a b =>
+    let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x <= y)
+    | _, _ => none
+  | .gtInt a b =>
+    let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x > y)
+    | _, _ => none
+  | .geqInt a b =>
+    let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x >= y)
+    | _, _ => none
+  | .lsString a b =>
+    let (a', b') := (semanticsStringExpr s d a x, semanticsStringExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x < y)
+    | _, _ => none
+  | .leqString a b =>
+    let (a', b') := (semanticsStringExpr s d a x, semanticsStringExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x <= y)
+    | _, _ => none
+  | .gtString a b =>
+    let (a', b') := (semanticsStringExpr s d a x, semanticsStringExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x > y)
+    | _, _ => none
+  | .geqString a b =>
+    let (a', b') := (semanticsStringExpr s d a x, semanticsStringExpr s d b x)
+    match a', b' with
+    | some x, some y => some (x >= y)
+    | _, _ => none
+  | .isNullBool a =>
+    let a' := semanticsBoolExpr s d a x
+    a' == none
+  | .isNotNullBool a =>
+    let a' := semanticsBoolExpr s d a x
+    a' != none
+  | .isNullString a =>
+    let a' := semanticsStringExpr s d a x
+    a' == none
+  | .isNotNullString a =>
+    let a' := semanticsStringExpr s d a x
+    a' != none
+  | .isNullInt a =>
+    let a' := semanticsIntExpr s d a x
+    a' == none
+  | .isNotNullInt a =>
+    let a' := semanticsIntExpr s d a x
+    a' != none
+  | .isTrue a =>
+    let a' := semanticsBoolExpr s d a x
+    a' == some true
+  | .isNotTrue a =>
+    let a' := semanticsBoolExpr s d a x
+    a' != some true
   | _ => none
 
 partial def semanticsIntExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: IntExpr) : DBRow → Option Int :=
