@@ -12,7 +12,6 @@ inductive TimePart where | Year | Month  | Day
   deriving Repr
 
 inductive Basetype where
-  | bit (size: Nat)
   | boolean
   | varchar (size: Nat)
   | integer
@@ -138,7 +137,6 @@ structure DatabaseSchema where
 
 instance : ToString Basetype where
   toString
-    | .bit size => s!"bit({size})"
     | .boolean => "boolean"
     | .varchar size => s!"varchar({size})"
     | .integer => s!"integer"

@@ -10,7 +10,7 @@ structure Env where
   tm: TermManager
   s: Solver
   map: HashMap String cvc5.Term := HashMap.empty
-  semantics : Semantics
+  semantics : SQLSemantics
   n : (Option Nat) := none
   constraints: Array cvc5.Term := #[]
 
@@ -90,17 +90,15 @@ def getSomeKind (e: Env) : cvc5.Kind :=
   | .bag => panic s!"BAG_ALL is not implemented in cvc5"
 
 
-def translateBasetype (e: Env) (b: Basetype) : Option cvc5.Sort :=
+def trBasetype (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
-  | .bigint => e.tm.getIntegerSort
   | .integer => e.tm.getIntegerSort
   | .boolean => e.tm.getBooleanSort
   | .varchar (_: Nat) => e.tm.getStringSort
-  | _ => none
 
-def translateDatatype (e: Env) (d: Datatype) : Option cvc5.Sort :=
-  let .datatype base isNullable := d
-  let s := translateBasetype e base
+def trSqlType (e: Env) (d: SqlType) : Option cvc5.Sort :=
+  let .sqlType base isNullable := d
+  let s := trBasetype e base
   match isNullable with
   | false => s
   | true => match s with
@@ -135,8 +133,8 @@ def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   |.set => e.tm.mkSetSort! tupleSort
 
 def declareTable (e: Env) (table: BaseTable) : Env :=
-  let sorts := table.columns.map (fun c => translateDatatype e c.datatype)
-  let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id)
+  let sorts := table.columns.map (fun c => trSqlType e c.sqlType)
+  let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id).toArray
   let tableSort := mkTableSort e tupleSort
   let tableTerm := e.s.declareFun table.name #[] tableSort
   let t := match tableTerm with
@@ -146,7 +144,7 @@ def declareTable (e: Env) (table: BaseTable) : Env :=
   let bound := match e.n with
   | none => e.tm.mkBoolean true
   | some m =>
-   let indices := getIndices m
+   let indices := List.range m
    let elements := indices.mapIdx (fun i x =>
      let const := e.s.declareFun s!"{table.name}_{i}" #[] tupleSort
      match const with
@@ -160,7 +158,7 @@ def declareTable (e: Env) (table: BaseTable) : Env :=
                   (fun a b => e.tm.mkTerm! (getUnionAllKind e) #[a, mkSingleton e b])
                   (mkEmptyTable e t.getSort)
    let subset := e.tm.mkTerm! (getSubsetKind e) #[t, unionAll]
-   let distinct := e.tm.mkTerm! .DISTINCT elements
+   let distinct := e.tm.mkTerm! .DISTINCT elements.toArray
    distinct.and! subset
   dbg_trace s!"(assert {bound})";
   { e with map := e.map.insert table.name t }
@@ -177,7 +175,7 @@ def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: Array cv
   else e.tm.mkTerm! k terms
 
 
-def translateAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+def trAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
   if needsLifting then
     let falseTerm := e.tm.mkNullableSome! (e.tm.mkBoolean false)
     let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
@@ -194,7 +192,7 @@ def translateAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.T
     e.tm.mkTerm! .AND terms
 
 
-def translateOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+def trOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
   if needsLifting then
     let trueTerm := e.tm.mkNullableSome! (e.tm.mkBoolean true)
     let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
@@ -229,7 +227,7 @@ def testDefineFun := do
 
 
 
---#eval getIndices 5
+--#eval List.range 5
 
 def mkNullableSort (e: Env) (s: cvc5.Sort) : cvc5.Sort :=
   if s.isNullable then s else e.tm.mkNullableSort! s
@@ -239,9 +237,9 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
   let productSort := getTupleSort e product.getSort
   let differenceKind := getDifferenceRemoveKind e
   let (aTupleLength, productTupleLength) := (aSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
-  let aIndices := getIndices aTupleLength
+  let aIndices := List.range aTupleLength
 -- dbg_trace s!"aIndices: {aIndices}";
-  let op := e.tm.mkOpOfIndices (getProjectKind e) aIndices |>.toOption.get!
+  let op := e.tm.mkOpOfIndices (getProjectKind e) aIndices.toArray |>.toOption.get!
 -- dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op #[product] |>.toOption.get!
 -- dbg_trace s!"projection: {projection}";
@@ -251,13 +249,13 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
 -- dbg_trace s!"t: {t}";
   let aTerms := aIndices.map (fun i => mkTupleSelect e aSort aVar i)
 -- dbg_trace s!"aTerms: {aTerms}";
-  let bIndices := getIndices (productTupleLength - aTupleLength) |>.map (fun i => i + aTupleLength)
+  let bIndices := List.range (productTupleLength - aTupleLength) |>.map (fun i => i + aTupleLength)
 -- dbg_trace s!"bIndices: {bIndices}";
   let productSorts := productSort.getTupleSorts!.map (fun s => mkNullableSort e s)
 -- dbg_trace s!"productSorts: {productSorts}";
   let bTerms := bIndices.map (fun i => e.tm.mkNullableNull productSorts[i]! |>.toOption.get!)
 -- dbg_trace s!"bTerms: {bTerms}";
-  let tuple := e.tm.mkTuple! (aTerms ++ bTerms)
+  let tuple := e.tm.mkTuple! (aTerms ++ bTerms).toArray
 -- dbg_trace s!"tuple: {tuple}";
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[aVar]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
@@ -274,9 +272,9 @@ def mkRight (e: Env) (b product: cvc5.Term) : cvc5.Term :=
 -- dbg_trace s!"b: {b}";
   let (bTupleLength, productTupleLength) := (bSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aTupleLength := productTupleLength - bTupleLength;
-  let bIndices := getIndices bTupleLength |>.map (fun x => x + aTupleLength)
+  let bIndices := List.range bTupleLength |>.map (fun x => x + aTupleLength)
 -- dbg_trace s!"bIndices: {bIndices}";
-  let op := e.tm.mkOpOfIndices (getProjectKind e) bIndices |>.toOption.get!
+  let op := e.tm.mkOpOfIndices (getProjectKind e) bIndices.toArray |>.toOption.get!
 -- dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op #[product] |>.toOption.get!
 -- dbg_trace s!"projection: {projection}";
@@ -286,12 +284,12 @@ def mkRight (e: Env) (b product: cvc5.Term) : cvc5.Term :=
 -- dbg_trace s!"bVar: {bVar}";
   let bTerms := bIndices.map (fun i => mkTupleSelect e bSort bVar (i - aTupleLength))
 -- dbg_trace s!"bTerms: {bTerms}";
-  let aIndices := getIndices (aTupleLength)
+  let aIndices := List.range (aTupleLength)
 -- dbg_trace s!"aIndices: {aIndices}";
   let productSorts := productSort.getTupleSorts!.map (fun s => mkNullableSort e s)
 -- dbg_trace s!"productSorts: {productSorts}";
   let aTerms := aIndices.map (fun i => e.tm.mkNullableNull productSorts[i]! |>.toOption.get!)
-  let tuple := e.tm.mkTuple! (aTerms ++ bTerms)
+  let tuple := e.tm.mkTuple! (aTerms ++ bTerms).toArray
 -- dbg_trace s!"tuple: {tuple}";
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[bVar]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
@@ -345,7 +343,7 @@ def isNotEmpty (e: Env) (t : cvc5.Term) : Option cvc5.Term :=
   let notEmpty := e.tm.mkTerm! .DISTINCT #[t,empty]
   notEmpty
 
-def translateUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+def trUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
   dbg_trace s!";; {name}";
   let table := e.map[baseTable]!
   let sort := getTupleSort e table.getSort
@@ -374,7 +372,7 @@ def translateUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cv
   dbg_trace s!"(assert {xAll})";
   xAll
 
-def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+def trPrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
   dbg_trace s!";; {name}";
   let table := e.map[baseTable]!
   let sort := getTupleSort e table.getSort
@@ -404,7 +402,7 @@ def translatePrimary (e: Env) (name baseTable: String) (columns : Array Nat) : c
   dbg_trace s!"(assert {and})";
   and
 
-def translateForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
+def trForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
   dbg_trace s!";; {name}";
   let (childTerm, parentTerm) := (e.map[child]!,e.map[parent]!)
   let filter : Array Nat → cvc5.Term → cvc5.Term :=
@@ -439,26 +437,26 @@ def translateForeign (e : Env) (name child parent : String) (childColumns parent
 
 
 mutual
-partial def translateQuery (e: Env) (Query: Query) : Option cvc5.Term :=
+partial def trQuery (e: Env) (Query: Query) : Option cvc5.Term :=
   match Query with
   | .baseTable name =>
     -- dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}";
     e.map[name]?
-  | .values rows types => translateValues e rows types
+  | .values rows => trValues e rows
   | .project exprs query =>
     -- dbg_trace s!" .project exprs:  query: ";
-    translateProject e exprs query
-  | .filter condition query  => translateFilter e condition query
-  | .queryOperation op l r => translateQueryOperation e op l r
-  | .join l r j c => translateJoin e l r j c
+    trProject e exprs query
+  | .filter condition query  => trFilter e condition query
+  | .queryOperation op l r => trQueryOperation e op l r
+  | .join l r j c => trJoin e l r j c
 
-partial def translateValues (e: Env) (rows: Array (Array Expr)) (types: Array Datatype): Option cvc5.Term :=
+partial def trValues (e: Env) (rows: List (List Expr)): Option cvc5.Term :=
   let tuples := rows.map (fun row =>
     let null:= (cvc5.Term.null .unit)
-    let f := (fun expr => translateExpr e null expr)
+    let f := (fun expr => trExpr e null expr)
                           let elements := row.map f |>.filterMap id
                           e.tm.mkTuple! elements)
-  let sorts := types.map (fun t => translateDatatype e t) |>.filterMap id
+  let sorts := types.map (fun t => trSqlType e t) |>.filterMap id
   let tupleSort := e.tm.mkTupleSort! sorts
   let tableSort := mkTableSort e tupleSort
   let emptyTable := mkEmptyTable e tableSort
@@ -467,11 +465,11 @@ partial def translateValues (e: Env) (rows: Array (Array Expr)) (types: Array Da
     some (e.tm.mkTerm! (getUnionAllKind e) #[table.get!, singleton])
   tuples.foldl combine emptyTable
 
-partial def translateFilter (e: Env) (condition: Expr) (query: Query) : Option cvc5.Term :=
-  let query' := translateQuery e query |>.get!
+partial def trFilter (e: Env) (condition: BoolExpr) (query: Query) : Option cvc5.Term :=
+  let query' := trQuery e query |>.get!
   let tupleSort := getTupleSort e query'.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := translateExpr e t condition |>.get!
+  let condition' := trExpr e t condition |>.get!
   let predicate := if condition'.getSort.isNullable
                 then
                 let isSome := e.tm.mkNullableIsSome! condition'
@@ -482,9 +480,9 @@ partial def translateFilter (e: Env) (condition: Expr) (query: Query) : Option c
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, predicate]
   e.tm.mkTerm! (getFilterKind e) #[lambda, query']
 
-partial def translateQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option cvc5.Term :=
-  let l' := translateQuery e l
-  let r' := translateQuery e r
+partial def trQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option cvc5.Term :=
+  let l' := trQuery e l
+  let r' := trQuery e r
   match op, e.semantics with
   | .union, .bag => e.tm.mkTerm! .BAG_SETOF #[(mkQueryOp e .BAG_UNION_DISJOINT  l'.get! r'.get!)]
   | .unionAll,.bag => mkQueryOp e .BAG_UNION_DISJOINT  l'.get! r'.get!
@@ -499,8 +497,8 @@ partial def translateQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option
   | .intersect, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
   | .intersectAll, .set => mkQueryOp e .SET_INTER  l'.get! r'.get!
 
-partial def translateProject (e: Env) (exprs: Array Expr) (query: Query) : Option cvc5.Term :=
-  let query' := translateQuery e query |>.get!
+partial def trProject (e: Env) (exprs: List Expr) (query: Query) : Option cvc5.Term :=
+  let query' := trQuery e query |>.get!
 --dbg_trace s!"query': {query'} exprs: {exprs}";
   let tupleSort := getTupleSort e query'.getSort
 --dbg_trace s!"tupleSort: {tupleSort}";
@@ -524,18 +522,18 @@ partial def translateProject (e: Env) (exprs: Array Expr) (query: Query) : Optio
   projection
   else
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let lambda := translateTupleExpr e exprs t |>.get!
+  let lambda := trTupleExpr e exprs t |>.get!
 --dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
-partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: Expr) : Option cvc5.Term :=
-  let l' := translateQuery e l |>.get!
-  let r' := translateQuery e r |>.get!
+partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: Expr) : Option cvc5.Term :=
+  let l' := trQuery e l |>.get!
+  let r' := trQuery e r |>.get!
   let unionKind := getUnionAllKind e
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := translateExpr e t condition |>.get!
+  let condition' := trExpr e t condition |>.get!
   -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
   -- let value := simplified.getBooleanValue!
   -- let product' :=
@@ -570,8 +568,8 @@ partial def translateJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition
     join'
 
 
-partial def translateTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Option cvc5.Term :=
-  let terms := exprs.map (fun expr => translateExpr e t expr)
+partial def trTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Option cvc5.Term :=
+  let terms := exprs.map (fun expr => trExpr e t expr)
   if terms.any (fun t => t.isNone) then none
   else
   let
@@ -581,7 +579,7 @@ partial def translateTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Op
   lambda
 
 
-partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
+partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
   match s with
   | .column index => mkTupleSelect e t.getSort t index
   | .stringLiteral v => e.tm.mkString v |>.toOption
@@ -594,10 +592,10 @@ partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
     | .varchar _ => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
     | _ => none
   | .exists query =>
-    let query' := (translateQuery e query) |>.get!
+    let query' := (trQuery e query) |>.get!
     isNotEmpty e query'
   | .case condition thenExpr elseExpr  =>
-    let terms := ((#[condition, thenExpr, elseExpr].map (translateExpr e t)).filterMap id)
+    let terms := ((#[condition, thenExpr, elseExpr].map (trExpr e t)).filterMap id)
     --dbg_trace s!"terms: {terms}";
     let thenTerm := terms[1]!
     let elseTerm := terms[2]!
@@ -612,7 +610,7 @@ partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
                       else  terms[0]!
     e.tm.mkTerm! .ITE (#[condition'] ++ nullableTerms)
   | .application op args =>
-    let terms := ((args.map (translateExpr e t)).filterMap id)
+    let terms := ((args.map (trExpr e t)).filterMap id)
     let needsLifting := terms.any (fun t => t.getSort.isNullable)
     let nullableTerms := if needsLifting
       then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
@@ -651,17 +649,17 @@ partial def translateExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
                    then (e.tm.mkNullableIsNull! arg0).or! (e.tm.mkNullableVal! arg0).not!
                    else e.tm.mkTerm! .NOT #[arg0]
     | "NOT" => liftIfNullable e needsLifting .NOT nullableTerms
-    | "AND" => translateAnd e needsLifting nullableTerms
-    | "OR" => translateOr e needsLifting nullableTerms
+    | "AND" => trAnd e needsLifting nullableTerms
+    | "OR" => trOr e needsLifting nullableTerms
     | _ => none
 
 end
 
-def translateCheck (e : Env) (name baseTable : String) (expr : Expr): cvc5.Term :=
+def trCheck (e : Env) (name baseTable : String) (expr : Expr): cvc5.Term :=
   dbg_trace s!";; {name}";
   let table := e.map[baseTable]!
   let t := e.tm.mkVar (getTupleSort e table.getSort) "t" |>.toOption.get!
-  let expr' := translateExpr e t expr |>.get!
+  let expr' := trExpr e t expr |>.get!
   let expr'' := if expr'.getSort.isNullable
     then
       let isSome := e.tm.mkNullableIsSome! expr'
@@ -673,26 +671,26 @@ def translateCheck (e : Env) (name baseTable : String) (expr : Expr): cvc5.Term 
   dbg_trace s!"(assert {all})"
   all
 
-def translateConstraint (e: Env) (c: Constraint) : cvc5.Term :=
+def trConstraint (e: Env) (c: Constraint) : cvc5.Term :=
   match c with
-  | .unique name baseTable columns => translateUnique e name baseTable columns
-  | .primaryKey name baseTable columns => translatePrimary e name baseTable columns
+  | .unique name baseTable columns => trUnique e name baseTable columns
+  | .primaryKey name baseTable columns => trPrimary e name baseTable columns
   | .foreignKey name child parent childColumns parentColumns =>
-     translateForeign e name child parent childColumns parentColumns
-  | .check name baseTable expr => translateCheck e name baseTable expr
+     trForeign e name child parent childColumns parentColumns
+  | .check name baseTable expr => trCheck e name baseTable expr
 
-def translateSchema (e: Env) (d: DatabaseSchema) : Env :=
+def trSchema (e: Env) (d: DatabaseSchema) : Env :=
   let e' := d.baseTables.foldl declareTable e
-  let constraints := d.constraints.map (fun c => translateConstraint e' c)
+  let constraints := d.constraints.map (fun c => trConstraint e' c)
   let e'' := {e' with constraints := constraints}
   e''
 
 
 
 def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :=
-  let e' := translateSchema e d
-  let q1' := translateQuery e' q1 |>.get!
-  let q2' := translateQuery e' q2 |>.get!
+  let e' := trSchema e d
+  let q1' := trQuery e' q1 |>.get!
+  let q2' := trQuery e' q2 |>.get!
   let formula := mkQueryOp e .DISTINCT q1' q2'
   dbg_trace s!"(assert {formula})";
   formula
@@ -702,7 +700,7 @@ def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let e: Env := {tm:= tm, s := s, semantics := .bag}
-  let x := translateDatatype e (.datatype .boolean true)
+  let x := trSqlType e (.datatype .boolean true)
   let y := tm.mkTupleSort! #[x.get!]
   let tTuple := tm.mkNullableSome! (tm.mkBoolean true)
   let fTuple := tm.mkNullableSome! (tm.mkBoolean false)
@@ -738,7 +736,7 @@ def test2 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let e: Env := {tm:= tm, s := s, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   return z.map
 
 --#eval test2 true
@@ -749,9 +747,9 @@ def test3 (isBag : Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let e: Env := {tm:= tm, s := s, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .queryOperation .unionAll  (.baseTable "users") (.baseTable "users")
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 --#eval test3 true
@@ -767,7 +765,7 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
   let x := Expr.boolLiteral value
   let andExpr := Expr.application op #[nullLiteral, x]
   let query := (e.tm.mkBoolean true)
-  let z : Option cvc5.Term := translateExpr e query andExpr
+  let z : Option cvc5.Term := trExpr e query andExpr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -796,7 +794,7 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   let x := Expr.boolLiteral value
   let expr := Expr.application op #[x]
   let query := (e.tm.mkBoolean true)
-  let z : Option cvc5.Term := translateExpr e query expr
+  let z : Option cvc5.Term := trExpr e query expr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -817,14 +815,14 @@ def testValues (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
                                 #[.intLiteral 2, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1]]
                                 #[.datatype .integer false,
                                 .datatype (.varchar 20) false,
                                 .datatype (.varchar 20) false,
                                 .datatype .integer false]
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 #eval testValues true
@@ -835,10 +833,10 @@ def testProjection (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .project #[.column 0, .column 1,
   .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 --#eval testProjection true
@@ -850,9 +848,9 @@ def testFilter (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 --#eval testFilter true
@@ -864,9 +862,9 @@ def testProduct (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 --#eval testProduct true
@@ -878,9 +876,9 @@ def testLeftJoin (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 --#eval testLeftJoin true
@@ -892,9 +890,9 @@ def testRightJoin (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .right (.boolLiteral true)
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 #eval testRightJoin true
@@ -906,9 +904,9 @@ def testFullJoin (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .join (.baseTable "users") (.baseTable "posts") .full (.boolLiteral true)
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 #eval testFullJoin true
@@ -921,13 +919,13 @@ def testProjectUnion (isBag : Bool) := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
-  let z := translateSchema e schema
+  let z := trSchema e schema
   let t : Query := .queryOperation
     .unionAll
     (.project #[.column 0, .column 1] (.baseTable "users"))
     (.project #[.column 0, .column 1] (.baseTable "posts"))
 
-  let w := translateQuery z t
+  let w := trQuery z t
   return w
 
 
@@ -1030,7 +1028,7 @@ def testConstraints  := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := .set, n:= some 3}
-  let e' := translateSchema e schema3
+  let e' := trSchema e schema3
   return e'
 
 #eval testConstraints
