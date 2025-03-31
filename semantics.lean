@@ -3,20 +3,9 @@ import Std.Data.HashSet
 import cvc5.Sql
 open Std
 
--- List intersection function
-def listIntersect [DecidableEq α] (l1 l2 : List α) : List α :=
-  l1.filter (fun x => x ∈ l2)
-
--- Function to remove duplicates
-def removeDuplicates {α : Type} [BEq α] [Hashable α] (lst : List α) : List α :=
+def removeDuplicates {a : Type} [BEq a] [Hashable a] (lst : List a) : List a :=
   let hashSet := lst.foldl (fun acc x => acc.insert x) HashSet.empty
   hashSet.toList
-
--- Example usage
-def list1 := [1, 2, 3,3, 4]
-def list2 := [3, 4, 5, 6]
-
-#eval listIntersect list1 list2
 
 inductive DBValue
  | boolValue (v: Option Bool)
@@ -34,22 +23,6 @@ def less (a b : DBValue) : Bool :=
   | .stringValue (some v1), .stringValue (some v2) => v1 ≤ v2
   | _, _ => false
 
--- def DBTable (n:Nat) := String × List (Vector DBValue n)
-
--- def v := Array.toVector #[1,2,3]
-
--- def List.toVector {α : Type} (xs : List α) : Vector α (xs.length):=
---   Array.toVector (List.toArray xs)
-
--- def students : DBTable 3 := ("students", [
---   List.toVector [.boolValue false, .intValue 5,.stringValue "a"],
---   List.toVector [.boolValue true, .intValue 6, .stringValue "b"],
---   List.toVector [.intValue 6, .intValue 6, .intValue 6]
--- ]
--- )
-
--- def DatabaseInstance (tupleLengths: List Nat) := tupleLengths.map (fun x => DBTable x)
-
 
 def DBRow := List DBValue deriving BEq, Inhabited
 def DBTable := List DBRow deriving BEq, Inhabited
@@ -59,11 +32,6 @@ instance : Repr DBValue where
   | .boolValue v => s!"{v}"
   | .intValue v => s!"{v}"
   | .stringValue v => s!"{v}"
-
--- instance : Repr DBRow where
---   reprPrec vs _ := vs.map toString |> String.intercalate ", "
-
-
 
 instance : Inhabited DBRow where
   default := []
@@ -108,7 +76,7 @@ partial def List.inter (as bs: DBTable) : DBTable :=
     else if lessThan x y then List.inter xs bs'
     else List.inter as' ys
 
-partial def List.minus {α : Type} [BEq α] [Hashable α] (as bs: List α) : List α :=
+partial def List.minus {a : Type} [BEq a] [Hashable a] (as bs: List a) : List a :=
   let pairs := as.map (fun x => (x, as.count x - bs.count x))
   let filter := pairs.filter (fun (_,n) => n > 0)
   let distinct := removeDuplicates filter
@@ -211,9 +179,7 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
   | .literal v => v
   | .exists q => !(semantics s d q).isEmpty
   | .case c t e =>
-    let c' := semanticsBoolExpr s d c
-    let t' := semanticsBoolExpr s d t
-    let e' := semanticsBoolExpr s d e
+    let (c',t', e'):= (semanticsBoolExpr s d c, semanticsBoolExpr s d t, semanticsBoolExpr s d e)
     let isTrue := fun y : DBRow =>
       let result := (c' y)
       result.isSome && result.get!
@@ -455,7 +421,7 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
   | .filter condition q =>
     let q' := semantics s d q
     let p := semanticsBoolExpr s d condition
-    let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
+    let q'' := List.filter (fun x => (p x).isSome && (p x).get!) q'
     q''
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
   | .values rows _ => rows.map (fun row => row.map (fun e =>
