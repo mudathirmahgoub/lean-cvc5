@@ -17,7 +17,7 @@ inductive DBValue
  | boolValue (v: Option Bool)
  | intValue (v: Option Int)
  | stringValue (v: Option String)
-deriving BEq, Repr
+deriving BEq
 
 instance : Inhabited DBValue where
   default := DBValue.boolValue false
@@ -46,8 +46,19 @@ def less (a b : DBValue) : Bool :=
 -- def DatabaseInstance (tupleLengths: List Nat) := tupleLengths.map (fun x => DBTable x)
 
 
-def DBRow := List DBValue deriving BEq, Repr
-def DBTable := List DBRow deriving BEq, Repr
+def DBRow := List DBValue deriving BEq, Repr, Inhabited
+def DBTable := List DBRow deriving BEq, Repr, Inhabited
+
+instance : Repr DBValue where
+  reprPrec v _ := match v with
+  | .boolValue v => s!"{v}"
+  | .intValue v => s!"{v}"
+  | .stringValue v => s!"{v}"
+
+-- instance : Repr DBRow where
+--   reprPrec vs _ := vs.map toString |> String.intercalate ", "
+
+
 
 instance : Inhabited DBRow where
   default := []
@@ -58,17 +69,20 @@ instance : Inhabited DBTable where
 
 def lessThan (a b : DBRow) : Bool :=
  match a,b with
- | [],[] => true
+ | [],[] => false
  | a::as,b::bs => (less a b) && lessThan as bs
- | [],_ => true
+ | [],_ => false
  | _,[] => false
 
 
-instance : ToString (DBValue) where
+instance : ToString DBValue where
   toString
-    | .boolValue v => toString v
-    | .intValue v => toString v
-    | .stringValue v => toString v
+    | .boolValue (some v) => toString v
+    | .boolValue none => "none"
+    | .intValue (some v) => toString v
+    | .intValue none => "none"
+    | .stringValue (some v) => toString v
+    | .stringValue none => "none"
 
 instance : ToString DBRow where
   toString lst := List.toString lst
@@ -89,16 +103,31 @@ partial def List.inter (as bs: DBTable) : DBTable :=
     else if lessThan x y then List.inter xs bs'
     else List.inter as' ys
 
-partial def List.minus (as bs: DBTable) : DBTable :=
-  let as' := List.mergeSort as lessThan
-  let bs' := List.mergeSort bs lessThan
-  match as', bs' with
+partial def List.minusHelper (as bs: DBTable) : DBTable :=
+  match as, bs with
   | [], _ => []
   | xs, [] => xs
   | x :: xs, y:: ys =>
-    if x == y then List.minus xs ys
-    else if lessThan x y then x::List.minus xs bs'
-    else List.minus as' ys
+    if x == y then
+     List.minusHelper xs ys
+    else if lessThan x y then
+      x::List.minusHelper xs bs
+    else
+      List.minusHelper as ys
+
+partial def List.minus (as bs: DBTable) : DBTable :=
+  let as' := List.mergeSort as lessThan
+  let bs' := List.mergeSort bs lessThan
+  dbg_trace s!"as': {as'}"
+  dbg_trace s!"bs': {bs'}"
+  let result := List.minusHelper as' bs'
+  dbg_trace s!"minus result: [{result}]"
+  result
+
+def as' : DBTable := [[.boolValue false,.intValue (some 30),.stringValue "Mixed"], [.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
+def bs' : DBTable := [[.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
+
+#eval List.minus as' bs'
 
 def List.product (xs : DBTable) (ys : DBTable) : DBTable :=
   xs.flatMap (fun x => ys.map (fun y => List.append x y))
@@ -200,6 +229,7 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
     ite
   | .boolEqual a b =>
     let (a', b') :=  (semanticsBoolExpr s d a x, semanticsBoolExpr s d b x)
+    dbg_trace s!"(a', b'):{(a', b')}"
     match a', b' with
     | some x, some y => x == y
     | _, _ => none
@@ -399,7 +429,11 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
     let (l', r') := (semantics s d l, semantics s d r)
     let product := List.product l' r'
     let p := semanticsBoolExpr s d condition
-    let result := List.filter (fun x => (p x).isSome ∧ (p x).get!) product
+    let result := List.filter (fun x =>
+    dbg_trace s!"x: {x}";
+     (p x).isSome && (p x).get!) product
+    dbg_trace s!"product: {product}";
+    dbg_trace s!"result: {result}";
     if product.isEmpty then product
     else
     let nulls (t : DBTable) : List DBValue :=
@@ -418,15 +452,20 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
       List.append result minusNulls
      | .right =>
       let minus := List.minus r' (result.map (fun x => x.drop l'.length))
-      let nullsLeft := nulls r'
+      let nullsLeft := nulls l'
       let minusNulls := minus.map (fun x => nullsLeft ++ x)
       List.append result minusNulls
      | .full =>
-      let minus1 := List.minus l' (result.map (fun x => x.take l'.length))
+      let leftProject := result.map (fun x => x.take l'.length)
+      let minus1 := List.minus l' leftProject
       let nullsRight := nulls r'
       let nulls1 := minus1.map (fun x => x ++ nullsRight)
-      let minus2 := List.minus r' (result.map (fun x => x.drop l'.length))
-      let nullsLeft := nulls r'
+      let rightProject := result.map (fun x => x.drop l'.length)
+      dbg_trace s!"r': {r'}"
+      dbg_trace s!"rightProject: {rightProject}"
+      let minus2 := List.minus r' rightProject
+      dbg_trace s!"minus2: {minus2}"
+      let nullsLeft := nulls l'
       let nulls2 := minus2.map (fun x => nullsLeft ++ x)
       List.append (List.append result nulls1) nulls2
   | .filter condition q =>
@@ -440,23 +479,29 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
 end
 
 
-def table : DBTable := [
+def table1 : DBTable := [
   [.boolValue true, .intValue (some 10), .stringValue "UPPER"],
   [.boolValue true, .intValue (some 15), .stringValue "lower"],
   [.boolValue false, .intValue (some 08), .stringValue "Mixed"]
   ]
 
-#eval List.mergeSort table lessThan
+def table2 : DBTable := [
+  [.boolValue true, .intValue (some 10), .stringValue "UPPER"],
+  [.boolValue true, .intValue (some 15), .stringValue "lower"],
+  [.boolValue false, .intValue (some 30), .stringValue "Mixed"]
+  ]
 
-def d: DatabaseInstance := HashMap.empty.insert "table" table
+#eval List.mergeSort table1 lessThan
 
-def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table")
+def d: DatabaseInstance := (HashMap.empty.insert "table1" table1).insert "table2" table2
+
+def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table1")
 def q2: Query :=
   let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.intLiteral 2))] (.baseTable "table")
   let filter := .filter (.lsInt (.column 1) (.intLiteral 25)) project
   filter
 
-def q3 : Query := .join (.baseTable "table") (.baseTable "table") .full (.boolEqual (.column 0) (.column 3))
+def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .left (.intEqual (.column 1) (.column 4))
 
 #eval semantics .bag d q1
 #eval semantics .bag d q2
