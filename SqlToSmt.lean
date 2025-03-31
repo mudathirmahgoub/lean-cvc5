@@ -970,13 +970,13 @@ def testProjection (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .project #[.column 0, .column 1,
-  .literal "hello", .application "+" #[.literal 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
+  let t : Query := .project [.intExpr (.column 0), .intExpr (.column 1),
+  .stringExpr (.literal "hello"), .intExpr (.plus (.literal 1) (.plus (.column 0) (.column 1)))] (.baseTable "posts")
   let w := trQuery z t
   return w
 
---#eval testProjection true
---#eval testProjection false
+-- #eval testProjection true
+-- #eval testProjection false
 
 
 def testFilter (isBag : Bool) := do
@@ -985,12 +985,12 @@ def testFilter (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .filter (.application ">" #[.column 0, .column 0]) (.baseTable "posts")
+  let t : Query := .filter (.lsInt (.column 0) (.column 0)) (.baseTable "posts")
   let w := trQuery z t
   return w
 
---#eval testFilter true
---#eval testFilter false
+-- #eval testFilter true
+-- #eval testFilter false
 
 
 def testProduct (isBag : Bool) := do
@@ -999,12 +999,12 @@ def testProduct (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .join (.baseTable "posts") (.baseTable "posts") .inner (.boolLiteral true)
+  let t : Query := .join (.baseTable "posts") (.baseTable "posts") .inner (.literal true)
   let w := trQuery z t
   return w
 
---#eval testProduct true
---#eval testProduct false
+-- #eval testProduct true
+-- #eval testProduct false
 
 
 def testLeftJoin (isBag : Bool) := do
@@ -1013,12 +1013,12 @@ def testLeftJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .join (.baseTable "users") (.baseTable "posts") .left (.boolLiteral true)
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .left (.literal true)
   let w := trQuery z t
   return w
 
---#eval testLeftJoin true
---#eval testLeftJoin false
+-- #eval testLeftJoin true
+-- #eval testLeftJoin false
 
 
 def testRightJoin (isBag : Bool) := do
@@ -1027,12 +1027,12 @@ def testRightJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .join (.baseTable "users") (.baseTable "posts") .right (.boolLiteral true)
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .right (.literal true)
   let w := trQuery z t
   return w
 
-#eval testRightJoin true
-#eval testRightJoin false
+-- #eval testRightJoin true
+-- #eval testRightJoin false
 
 
 def testFullJoin (isBag : Bool) := do
@@ -1041,7 +1041,7 @@ def testFullJoin (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .join (.baseTable "users") (.baseTable "posts") .full (.boolLiteral true)
+  let t : Query := .join (.baseTable "users") (.baseTable "posts") .full (.literal true)
   let w := trQuery z t
   return w
 
@@ -1058,8 +1058,8 @@ def testProjectUnion (isBag : Bool) := do
   let z := trSchema e schema
   let t : Query := .queryOperation
     .unionAll
-    (.project #[.column 0, .column 1] (.baseTable "users"))
-    (.project #[.column 0, .column 1] (.baseTable "posts"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "users"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "posts"))
 
   let w := trQuery z t
   return w
@@ -1076,12 +1076,12 @@ def testVerify (isBag : Bool) := do
   let e: Env := {tm:= tm, s := s3.snd, semantics := if isBag then .bag else .set}
   let q1 : Query := .queryOperation
     .unionAll
-    (.project #[.column 0, .column 1] (.baseTable "users"))
-    (.project #[.column 0, .column 1] (.baseTable "posts"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "users"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "posts"))
   let q2 : Query := .queryOperation
     .unionAll
-    (.project #[.column 0, .column 1] (.baseTable "posts"))
-    (.project #[.column 0, .column 1] (.baseTable "users"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "posts"))
+    (.project [.intExpr (.column 0),.intExpr (.column 1)] (.baseTable "users"))
   let formula := equivalenceFormula e schema q1 q2
   return formula
 
@@ -1097,7 +1097,7 @@ def testExists (isBag : Bool) := do
   let s3 ← s2.snd.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s3.snd, semantics := if isBag then .bag else .set}
   let users : Query := (.baseTable "users")
-  let q1 : Query := .filter ( .boolLiteral true) users
+  let q1 : Query := .filter ( .literal true) users
   let q2 : Query := .filter ( .exists users) users
   let formula := equivalenceFormula e schema q1 q2
   return formula
@@ -1108,8 +1108,8 @@ def testExists (isBag : Bool) := do
 
 
 def schema2 : DatabaseSchema :=
-  { baseTables := #[
-      { name := "users", columns := #[
+  { baseTables := [
+      { name := "users", columns := [
           { index := 0, sqlType := SqlType.sqlType Basetype.boolean true },
           { index := 1, sqlType := SqlType.sqlType Basetype.integer true },
           { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
@@ -1123,13 +1123,13 @@ def testCaseStatement  := do
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := .bag}
-  let x := Expr.column 0
-  let y := Expr.column 1
-  let z := Expr.column 2
-  let case1 := Expr.case x y z
-  let case2 := Expr.case (.application "AND" #[x,.boolLiteral true]) y z
-  let q1 : Query := .project #[case1] (.baseTable "users")
-  let q2 : Query := .project #[case2] (.baseTable "users")
+  let x := BoolExpr.column 0
+  let y := IntExpr.column 1
+  let z := IntExpr.column 2
+  let case1 := Expr.intExpr (.case x y z)
+  let case2 := Expr.intExpr (.case (.and x (.literal true)) y z)
+  let q1 : Query := .project [case1] (.baseTable "users")
+  let q2 : Query := .project [case2] (.baseTable "users")
   let formula := equivalenceFormula e schema2 q1 q2
   return formula
 
@@ -1137,25 +1137,25 @@ def testCaseStatement  := do
 
 
 def schema3 : DatabaseSchema :=
-  { baseTables := #[
-      { name := "users", columns := #[
+  { baseTables := [
+      { name := "users", columns := [
           { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
           { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
           { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
         ]
       },
-      { name := "child", columns := #[
+      { name := "child", columns := [
           { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
           { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
           { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
         ]
       }
     ],
-    constraints := #[
-      .unique "uq" "users" #[0,1],
-      .primaryKey "pq" "users" #[0,1],
-      .foreignKey "fk" "child" "users" #[0,1] #[1,0],
-      .check "ck" "users" (.application ">" #[.column 0, .literal 0])
+    constraints := [
+      .unique "uq" "users" [0,1],
+      .primaryKey "pq" "users" [0,1],
+      .foreignKey "fk" "child" "users" [0,1] [1,0],
+      .check "ck" "users" (Expr.boolExpr (.gtInt (.column 0) (.literal 0)))
     ]
   }
 
@@ -1172,5 +1172,3 @@ def testConstraints  := do
 #check Int
 #check String
 #check Array Type
-
-def tupleType (q: Query) : Type := sorry
