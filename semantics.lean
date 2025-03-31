@@ -221,7 +221,6 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
     ite
   | .boolEqual a b =>
     let (a', b') :=  (semanticsBoolExpr s d a x, semanticsBoolExpr s d b x)
-    dbg_trace s!"(a', b'):{(a', b')}"
     match a', b' with
     | some x, some y => x == y
     | _, _ => none
@@ -421,11 +420,7 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
     let (l', r') := (semantics s d l, semantics s d r)
     let product := List.product l' r'
     let p := semanticsBoolExpr s d condition
-    let result := List.filter (fun x =>
-    dbg_trace s!"x: {x}";
-     (p x).isSome && (p x).get!) product
-    dbg_trace s!"product: {product}";
-    dbg_trace s!"result: {result}";
+    let result := List.filter (fun x => (p x).isSome && (p x).get!) product
     if product.isEmpty then product
     else
     let nulls (t : DBTable) : List DBValue :=
@@ -453,10 +448,7 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
       let nullsRight := nulls r'
       let nulls1 := minus1.map (fun x => x ++ nullsRight)
       let rightProject := result.map (fun x => x.drop l'.length)
-      dbg_trace s!"r': {r'}"
-      dbg_trace s!"rightProject: {rightProject}"
       let minus2 := List.minus r' rightProject
-      dbg_trace s!"minus2: {minus2}"
       let nullsLeft := nulls l'
       let nulls2 := minus2.map (fun x => nullsLeft ++ x)
       List.append (List.append result nulls1) nulls2
