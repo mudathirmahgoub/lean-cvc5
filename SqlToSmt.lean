@@ -240,30 +240,18 @@ def mkLeft (e: Env) (a product: cvc5.Term) : cvc5.Term :=
   let differenceKind := getDifferenceRemoveKind e
   let (aTupleLength, productTupleLength) := (aSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aIndices := List.range aTupleLength
--- dbg_trace s!"aIndices: {aIndices}";
   let op := e.tm.mkOpOfIndices (getProjectKind e) aIndices.toArray |>.toOption.get!
--- dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op #[product] |>.toOption.get!
--- dbg_trace s!"projection: {projection}";
   let difference := e.tm.mkTerm! differenceKind #[a, projection]
--- dbg_trace s!"difference: {difference}";
   let aVar := e.tm.mkVar aSort "t" |>.toOption.get!
--- dbg_trace s!"t: {t}";
   let aTerms := aIndices.map (fun i => mkTupleSelect e aSort aVar i)
--- dbg_trace s!"aTerms: {aTerms}";
   let bIndices := List.range (productTupleLength - aTupleLength) |>.map (fun i => i + aTupleLength)
--- dbg_trace s!"bIndices: {bIndices}";
   let productSorts := productSort.getTupleSorts!.map (fun s => mkNullableSort e s)
--- dbg_trace s!"productSorts: {productSorts}";
   let bTerms := bIndices.map (fun i => e.tm.mkNullableNull productSorts[i]! |>.toOption.get!)
--- dbg_trace s!"bTerms: {bTerms}";
   let tuple := e.tm.mkTuple! (aTerms ++ bTerms).toArray
--- dbg_trace s!"tuple: {tuple}";
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[aVar]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
-  -- dbg_trace s!"lambda: {lambda}";
   let map := e.tm.mkTerm! (getMapKind e) #[lambda, difference]
-  -- dbg_trace s!"map: {map}";
   map
 
 
@@ -271,33 +259,21 @@ def mkRight (e: Env) (b product: cvc5.Term) : cvc5.Term :=
   let bSort := getTupleSort e b.getSort
   let productSort := getTupleSort e product.getSort
   let differenceKind := getDifferenceRemoveKind e
--- dbg_trace s!"b: {b}";
   let (bTupleLength, productTupleLength) := (bSort.getTupleLength!.toNat, productSort.getTupleLength!.toNat)
   let aTupleLength := productTupleLength - bTupleLength;
   let bIndices := List.range bTupleLength |>.map (fun x => x + aTupleLength)
--- dbg_trace s!"bIndices: {bIndices}";
   let op := e.tm.mkOpOfIndices (getProjectKind e) bIndices.toArray |>.toOption.get!
--- dbg_trace s!"op: {op}";
   let projection := e.tm.mkTermOfOp op #[product] |>.toOption.get!
--- dbg_trace s!"projection: {projection}";
   let difference := e.tm.mkTerm! differenceKind #[b, projection]
--- dbg_trace s!"difference: {difference}";
   let bVar := e.tm.mkVar bSort "t" |>.toOption.get!
--- dbg_trace s!"bVar: {bVar}";
   let bTerms := bIndices.map (fun i => mkTupleSelect e bSort bVar (i - aTupleLength))
--- dbg_trace s!"bTerms: {bTerms}";
   let aIndices := List.range (aTupleLength)
--- dbg_trace s!"aIndices: {aIndices}";
   let productSorts := productSort.getTupleSorts!.map (fun s => mkNullableSort e s)
--- dbg_trace s!"productSorts: {productSorts}";
   let aTerms := aIndices.map (fun i => e.tm.mkNullableNull productSorts[i]! |>.toOption.get!)
   let tuple := e.tm.mkTuple! (aTerms ++ bTerms).toArray
--- dbg_trace s!"tuple: {tuple}";
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[bVar]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
-  -- dbg_trace s!"lambda: {lambda}";
   let map := e.tm.mkTerm! (getMapKind e) #[lambda, difference]
-  -- dbg_trace s!"map: {map}";
   map
 
 def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Array cvc5.Sort) : cvc5.Term :=
@@ -445,15 +421,11 @@ def getNullableTerms (e : Env) (terms: List cvc5.Term) :=
  (needsLifting, nullableTerms)
 
 mutual
-partial def trQuery (e: Env) (Query: Query) : Option cvc5.Term :=
-  match Query with
-  | .baseTable name =>
-    -- dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}";
-    e.map[name]?
+partial def trQuery (e: Env) (query: Query) : Option cvc5.Term :=
+  match query with
+  | .baseTable name => e.map[name]?
   | .values rows sqlTypes => trValues e rows sqlTypes
-  | .project exprs query =>
-    -- dbg_trace s!" .project exprs:  query: ";
-    trProject e exprs query
+  | .project exprs query => trProject e exprs query
   | .filter condition query  => trFilter e condition query
   | .queryOperation op l r => trQueryOperation e op l r
   | .join l r j c => trJoin e l r j c
@@ -507,35 +479,24 @@ partial def trQueryOperation (e: Env) (op: QueryOp) (l r: Query) : Option cvc5.T
 
 partial def trProject (e: Env) (exprs: List Expr) (query: Query) : Option cvc5.Term :=
   let query' := trQuery e query |>.get!
---dbg_trace s!"query': {query'} exprs: {exprs}";
   let tupleSort := getTupleSort e query'.getSort
---dbg_trace s!"tupleSort: {tupleSort}";
   let isProject := exprs.all (fun x => match x with
     | .boolExpr (.column _) => true
     | .intExpr (.column _) => true
     | .stringExpr (.column _) => true
     | _ => false)
---dbg_trace s!"isProject: {isProject}";
---dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isProject then
   let indices := exprs.map (fun x => match x with
     | .boolExpr (.column i) => i
     | .intExpr (.column i) => i
     | .stringExpr (.column i) => i
     | _ => panic! "not an indexed column")
---dbg_trace s!"indices: {indices}";
   let op := e.tm.mkOpOfIndices (getProjectKind e) indices.toArray |>.toOption.get!
---dbg_trace s!"op: {op}";
---dbg_trace s!"query: {repr query}";
---dbg_trace s!"query': {query'}";
---dbg_trace s!"query: {query'.getSort} I am here";
   let projection := e.tm.mkTermOfOp op  #[query'] |>.toOption.get!
---dbg_trace s!"projection: {projection}";
   projection
   else
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let lambda := trTupleExpr e exprs t |>.get!
---dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
 partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolExpr) : Option cvc5.Term :=
@@ -546,11 +507,6 @@ partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolE
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
   let condition' := trBoolExpr e t condition |>.get!
-  -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
-  -- let value := simplified.getBooleanValue!
-  -- let product' :=
-  -- if value then product
-  -- else
   let predicate := if condition'.getSort.isNullable
                 then
                 let isSome := e.tm.mkNullableIsSome! condition'
@@ -564,8 +520,6 @@ partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolE
   | .inner => product'
   | .left =>
     let left := mkLeft e l' product'
-  --dbg_trace s!"left: {left}";
-    -- let join := e.tm.mkTerm! unionKind #[product', left]
     let join := mkQueryOp e unionKind product' left
     join
   | .right =>
@@ -788,7 +742,6 @@ partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
   | .boolExpr a => trBoolExpr e t a
   | .intExpr a => trIntExpr e t a
   | .stringExpr a => trStringExpr e t a
-
 end
 
 def trCheck (e : Env) (name baseTable : String) (expr : Expr): cvc5.Term :=
