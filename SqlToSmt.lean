@@ -170,12 +170,12 @@ def isIntegerOrNullableInteger (t: cvc5.Term) : Bool :=
   (t.getSort.isNullable && t.getSort.getNullableElementSort!.isInteger)
 
 
-def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: Array cvc5.Term) : cvc5.Term :=
-  if needsLifting then e.tm.mkNullableLift! k terms
-  else e.tm.mkTerm! k terms
+def liftIfNullable (e: Env) (needsLifting: Bool) (k: cvc5.Kind) (terms: List cvc5.Term) : cvc5.Term :=
+  if needsLifting then e.tm.mkNullableLift! k terms.toArray
+  else e.tm.mkTerm! k terms.toArray
 
 
-def trAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+def trAnd (e: Env) (needsLifting: Bool) (terms: List cvc5.Term) : cvc5.Term :=
   if needsLifting then
     let falseTerm := e.tm.mkNullableSome! (e.tm.mkBoolean false)
     let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
@@ -187,12 +187,13 @@ def trAnd (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
     let isFirstFalse := e.tm.mkTerm! .AND #[fstIsSome, fstValFalse]
     let isSecondFalse := e.tm.mkTerm! .AND #[sndIsSome, sndValFalse]
     e.tm.mkTerm! .ITE #[isFirstFalse, falseTerm,
-                        e.tm.mkTerm! .ITE #[isSecondFalse, falseTerm, e.tm.mkNullableLift! .AND terms]]
+                        e.tm.mkTerm! .ITE #[isSecondFalse, falseTerm,
+                                            e.tm.mkNullableLift! .AND terms.toArray]]
   else
-    e.tm.mkTerm! .AND terms
+    e.tm.mkTerm! .AND terms.toArray
 
 
-def trOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
+def trOr (e: Env) (needsLifting: Bool) (terms: List cvc5.Term) : cvc5.Term :=
   if needsLifting then
     let trueTerm := e.tm.mkNullableSome! (e.tm.mkBoolean true)
     let fstIsSome := e.tm.mkNullableIsSome! terms[0]!
@@ -202,9 +203,10 @@ def trOr (e: Env) (needsLifting: Bool) (terms: Array cvc5.Term) : cvc5.Term :=
     let isFirstTrue := e.tm.mkTerm! .AND #[fstIsSome, fstVal]
     let isSecondTrue := e.tm.mkTerm! .AND #[sndIsSome, sndVal]
     e.tm.mkTerm! .ITE #[isFirstTrue, trueTerm,
-                        e.tm.mkTerm! .ITE #[isSecondTrue, trueTerm, e.tm.mkNullableLift! .OR terms]]
+                        e.tm.mkTerm! .ITE #[isSecondTrue,
+                        trueTerm, e.tm.mkNullableLift! .OR terms.toArray]]
   else
-    e.tm.mkTerm! .OR terms
+    e.tm.mkTerm! .OR terms.toArray
 
 
 def defineFun (e: Env) : cvc5.Term :=
@@ -434,7 +436,13 @@ def trForeign (e : Env) (name child parent : String) (childColumns parentColumns
   subset
 
 
-
+def getNullableTerms (e : Env) (terms: List cvc5.Term) :=
+ let needsLifting := terms.any (fun t => t.getSort.isNullable)
+ let nullableTerms :=
+   if needsLifting
+   then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
+   else terms
+ (needsLifting, nullableTerms)
 
 mutual
 partial def trQuery (e: Env) (Query: Query) : Option cvc5.Term :=
@@ -526,7 +534,7 @@ partial def trProject (e: Env) (exprs: List Expr) (query: Query) : Option cvc5.T
 --dbg_trace s!"lambda: {lambda}";
   e.tm.mkTerm! (getMapKind e) #[lambda, query']
 
-partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: Expr) : Option cvc5.Term :=
+partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolExpr) : Option cvc5.Term :=
   let l' := trQuery e l |>.get!
   let r' := trQuery e r |>.get!
   let unionKind := getUnionAllKind e
@@ -577,6 +585,147 @@ partial def trTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Option cv
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
   lambda
+
+partial def trBoolArgs (e: Env) (k: cvc5.Kind) (t: cvc5.Term) (args : List BoolExpr) : cvc5.Term :=
+  let terms := ((args.map (trBoolExpr e t)).filterMap id)
+    let needsLifting := terms.any (fun t => t.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
+      else terms
+    let arg0 := nullableTerms[0]!
+    liftIfNullable e needsLifting k nullableTerms
+
+partial def trStringArgs (e: Env) (k: cvc5.Kind) (t: cvc5.Term) (args : List StringExpr) : cvc5.Term :=
+  let terms := ((args.map (trStringExpr e t)).filterMap id)
+    let needsLifting := terms.any (fun t => t.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
+      else terms
+    let arg0 := nullableTerms[0]!
+    liftIfNullable e needsLifting k nullableTerms
+
+partial def trIntArgs (e: Env) (k: cvc5.Kind) (t: cvc5.Term) (args : List IntExpr) : cvc5.Term :=
+  let terms := ((args.map (trIntExpr e t)).filterMap id)
+    let needsLifting := terms.any (fun t => t.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
+      else terms
+    let arg0 := nullableTerms[0]!
+    liftIfNullable e needsLifting k nullableTerms
+
+partial def trBoolExpr (e: Env) (t: cvc5.Term) (s: BoolExpr): Option cvc5.Term :=
+match s with
+  | .column index => mkTupleSelect e t.getSort t index
+  | .boolLiteral v => e.tm.mkBoolean v
+  | .nullBool => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
+  | .exists query =>
+    let query' := (trQuery e query) |>.get!
+    isNotEmpty e query'
+  | .case condition thenExpr elseExpr  =>
+    let terms := ((#[condition, thenExpr, elseExpr].map (trBoolExpr e t)).filterMap id)
+    let thenTerm := terms[1]!
+    let elseTerm := terms[2]!
+    let thenElse := #[thenTerm, elseTerm]
+    let needsLifting := thenElse.any (fun x => x.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then thenElse.map (fun x => if x.getSort.isNullable then x else e.tm.mkNullableSome! x)
+      else thenElse
+    let condition' := if terms[0]!.getSort.isNullable then
+                       (e.tm.mkNullableIsSome! terms[0]!).and! (e.tm.mkNullableVal! terms[0]!)
+                      else  terms[0]!
+    e.tm.mkTerm! .ITE (#[condition'] ++ nullableTerms)
+  | .boolEqual a b => trBoolArgs e .EQUAL t [a,b]
+  | .intEqual a b => trIntArgs e .EQUAL t [a,b]
+  | .stringEqual a b => trStringArgs e .EQUAL t [a,b]
+  | .not a =>
+    let a' := trBoolExpr e t a |>.get!
+    liftIfNullable e a'.getSort.isNullable .NOT [a']
+  | .and a b =>
+    let (a', b') := (trBoolExpr e t a |>.get!, trBoolExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    trAnd e needsLifting nullableTerms
+  | .or a b =>
+    let (a', b') := (trBoolExpr e t a |>.get!, trBoolExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    trOr e needsLifting nullableTerms
+  | .lsInt a b =>
+    let (a', b') := (trIntExpr e t a |>.get!, trIntExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .LT nullableTerms
+  | .leqInt a b =>
+    let (a', b') := (trIntExpr e t a |>.get!, trIntExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .LEQ nullableTerms
+  | .gtInt a b =>
+    let (a', b') := (trIntExpr e t a |>.get!, trIntExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .GT nullableTerms
+  | .geqInt a b =>
+    let (a', b') := (trIntExpr e t a |>.get!, trIntExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .GEQ nullableTerms
+  | .lsString a b =>
+    let (a', b') := (trStringExpr e t a |>.get!, trStringExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .STRING_LT nullableTerms
+  | .leqString a b =>
+    let (a', b') := (trStringExpr e t a |>.get!, trStringExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .STRING_LEQ nullableTerms
+  | .gtString a b =>
+    let (a', b') := (trStringExpr e t a |>.get!, trStringExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [b', a']
+    liftIfNullable e needsLifting .STRING_LT nullableTerms
+  | .geqString a b =>
+    let (a', b') := (trStringExpr e t a |>.get!, trStringExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [b', a']
+    liftIfNullable e needsLifting .STRING_LEQ nullableTerms
+  | .isNullBool a =>
+    let a' := trBoolExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsNull! a'
+    else e.tm.mkBoolean false
+  | .isNotNullBool a =>
+    let a' := trBoolExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsSome! a'
+    else e.tm.mkBoolean true
+  | .isNullInt a =>
+    let a' := trIntExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsNull! a'
+    else e.tm.mkBoolean false
+  | .isNotNullInt a =>
+    let a' := trIntExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsSome! a'
+    else e.tm.mkBoolean true
+  | .isNullString a =>
+    let a' := trStringExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsNull! a'
+    else e.tm.mkBoolean false
+  | .isNotNullString a =>
+    let a' := trStringExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then e.tm.mkNullableIsSome! a'
+    else e.tm.mkBoolean true
+  | .isTrue a =>
+    let a' := trBoolExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then (e.tm.mkNullableIsSome! a').and! (e.tm.mkNullableVal! a')
+    else a'
+  | .isNotTrue a =>
+    let a' := trBoolExpr e t a |>.get!
+    if a'.getSort.isNullable
+    then (e.tm.mkNullableIsNull! a').or! (e.tm.mkNullableVal! a').not!
+    else e.tm.mkTerm! .NOT #[a']
+
+partial def trStringExpr (e: Env) (t: cvc5.Term) (s: StringExpr): Option cvc5.Term :=
+sorry
+
+partial def trIntExpr (e: Env) (t: cvc5.Term) (s: IntExpr): Option cvc5.Term :=
+sorry
 
 
 partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
