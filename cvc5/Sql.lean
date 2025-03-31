@@ -19,18 +19,18 @@ inductive Basetype where
   deriving Repr
 
 inductive SqlType where
-  | datatype (basetype : Basetype) (isNull : Bool)
+  | sqlType (basetype : Basetype) (isNull : Bool)
   deriving Repr
 
 
 structure Column where
   index : Nat
-  datatype : SqlType
+  sqlType : SqlType
   deriving Repr
 
 structure BaseTable where
   name : String
-  columns : Array Column
+  columns : List Column
   deriving Repr
 
 
@@ -56,11 +56,11 @@ inductive Join where
 mutual
 inductive Query where
   | baseTable (name : String) : Query
-  | project (expr: Array Expr) (query: Query) : Query
+  | project (expr: List Expr) (query: Query) : Query
   | join (l: Query) (r: Query) (join : Join) (condition: BoolExpr) : Query
   | filter (condition: BoolExpr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
-  | values (rows: Array (Array Expr)) (types: Array SqlType) : Query
+  | values (rows: List (List Expr)) (types: List SqlType) : Query
   deriving Repr
 
 inductive StringExpr : Type where
@@ -124,15 +124,15 @@ inductive Expr : Type where
 end
 
 inductive Constraint where
-  | unique (name baseTable : String) (columns :Array Nat) : Constraint
-  | primaryKey  (name baseTable : String) (columns :Array Nat) : Constraint
-  | foreignKey (name child parent : String) (childColumns parentColumns :Array Nat) : Constraint
+  | unique (name baseTable : String) (columns :List Nat) : Constraint
+  | primaryKey  (name baseTable : String) (columns :List Nat) : Constraint
+  | foreignKey (name child parent : String) (childColumns parentColumns :List Nat) : Constraint
   | check (name baseTable : String) (expr :Expr) : Constraint
    deriving Repr
 
 structure DatabaseSchema where
-  baseTables : Array BaseTable
-  constraints : Array Constraint := #[]
+  baseTables : List BaseTable
+  constraints : List Constraint := []
   deriving Repr
 
 
@@ -148,11 +148,13 @@ instance : ToString Expr where
     | _ => s!"Expr not supported yet"
 
 
-instance : ToString (Array Expr) where
+instance : ToString (List Expr) where
   toString arr :=
-    "[" ++ String.intercalate ", " (arr.toList.map toString) ++ "]"
+    "[" ++ String.intercalate ", " (arr.map toString) ++ "]"
 
 
-
-def getIndices (n : Nat) : Array Nat :=
-  Array.mkArray n 0 |>.mapIdx (fun i _ => i)
+def sqlType (e : Expr) : SqlType :=
+match e with
+| .boolExpr _ => SqlType.sqlType Basetype.boolean true
+| .stringExpr _ => SqlType.sqlType (Basetype.varchar 255) true
+| .intExpr _ => SqlType.sqlType Basetype.integer true

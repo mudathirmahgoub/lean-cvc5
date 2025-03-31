@@ -49,6 +49,12 @@ def less (a b : DBValue) : Bool :=
 def DBRow := List DBValue deriving BEq, Repr
 def DBTable := List DBRow deriving BEq, Repr
 
+instance : Inhabited DBRow where
+  default := []
+
+instance : Inhabited DBTable where
+  default := []
+
 
 def lessThan (a b : DBRow) : Bool :=
  match a,b with
@@ -169,6 +175,9 @@ instance : ToString BoolExpr where
     -- | .exists q => s!"exists {q}"
     -- | .case c t e => s!"case {c} {t} {e}"
     | _ => "unknown"
+
+
+#eval [1,2,3].take 2
 
 mutual
 partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: BoolExpr) : DBRow → Option Bool :=
@@ -374,13 +383,15 @@ partial def semanticsExpr (s : SQLSemantics) (d: DatabaseInstance) (e : Expr): D
   |.stringExpr e' => .stringValue (semanticsStringExpr s d e' x)
   |.intExpr e' => .intValue (semanticsIntExpr s d e' x)
 
+
+
 partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBTable :=
   match q with
   | .baseTable name =>
     d.get! name
   | .project exprs q =>
    let q' := semantics s d q
-   let f := exprs.map (semanticsExpr s d) |>.toList
+   let f := exprs.map (semanticsExpr s d)
    let f' := fun x : DBRow => f.map (fun g => g x)
    let q'' := List.map f' q'
    q''
@@ -391,12 +402,33 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
     let result := List.filter (fun x => (p x).isSome ∧ (p x).get!) product
     if product.isEmpty then product
     else
+    let nulls (t : DBTable) : List DBValue :=
+      (List.range t.length).map
+        (fun i => match (t.get! 0).get! i with
+          | .boolValue _ => .boolValue (none : Option Bool)
+          | .intValue _ => .intValue (none : Option Int)
+          | .stringValue _ => .stringValue (none : Option String)
+        )
     match join with
      | .inner => result
      | .left =>
-       let nulls :=
-     | .right => []
-     | .full => []
+      let minus := List.minus l' (result.map (fun x => x.take l'.length))
+      let nullsRight := nulls r'
+      let minusNulls := minus.map (fun x => x ++ nullsRight)
+      List.append result minusNulls
+     | .right =>
+      let minus := List.minus r' (result.map (fun x => x.drop l'.length))
+      let nullsLeft := nulls r'
+      let minusNulls := minus.map (fun x => nullsLeft ++ x)
+      List.append result minusNulls
+     | .full =>
+      let minus1 := List.minus l' (result.map (fun x => x.take l'.length))
+      let nullsRight := nulls r'
+      let nulls1 := minus1.map (fun x => x ++ nullsRight)
+      let minus2 := List.minus r' (result.map (fun x => x.drop l'.length))
+      let nullsLeft := nulls r'
+      let nulls2 := minus2.map (fun x => nullsLeft ++ x)
+      List.append (List.append result nulls1) nulls2
   | .filter condition q =>
     let q' := semantics s d q
     let p := semanticsBoolExpr s d condition
@@ -420,10 +452,12 @@ def d: DatabaseInstance := HashMap.empty.insert "table" table
 
 def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table")
 def q2: Query :=
-  let project := .project #[.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.intLiteral 2))] (.baseTable "table")
+  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.intLiteral 2))] (.baseTable "table")
   let filter := .filter (.lsInt (.column 1) (.intLiteral 25)) project
   filter
-#eval q1
+
+def q3 : Query := .join (.baseTable "table") (.baseTable "table") .full (.boolEqual (.column 0) (.column 3))
 
 #eval semantics .bag d q1
 #eval semantics .bag d q2
+#eval semantics .bag d q3
