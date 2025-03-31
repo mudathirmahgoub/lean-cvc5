@@ -60,7 +60,7 @@ inductive Query where
   | join (l: Query) (r: Query) (join : Join) (condition: BoolExpr) : Query
   | filter (condition: BoolExpr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
-  | values (rows: List (List Expr)) (types: List SqlType) : Query
+  | values (rows: List (List Expr)) : Query
   deriving Repr
 
 inductive StringExpr : Type where
