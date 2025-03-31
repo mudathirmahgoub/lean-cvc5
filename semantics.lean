@@ -7,6 +7,11 @@ open Std
 def listIntersect [DecidableEq α] (l1 l2 : List α) : List α :=
   l1.filter (fun x => x ∈ l2)
 
+-- Function to remove duplicates
+def removeDuplicates {α : Type} [BEq α] [Hashable α] (lst : List α) : List α :=
+  let hashSet := lst.foldl (fun acc x => acc.insert x) HashSet.empty
+  hashSet.toList
+
 -- Example usage
 def list1 := [1, 2, 3,3, 4]
 def list2 := [3, 4, 5, 6]
@@ -46,8 +51,8 @@ def less (a b : DBValue) : Bool :=
 -- def DatabaseInstance (tupleLengths: List Nat) := tupleLengths.map (fun x => DBTable x)
 
 
-def DBRow := List DBValue deriving BEq, Repr, Inhabited
-def DBTable := List DBRow deriving BEq, Repr, Inhabited
+def DBRow := List DBValue deriving BEq, Inhabited
+def DBTable := List DBRow deriving BEq, Inhabited
 
 instance : Repr DBValue where
   reprPrec v _ := match v with
@@ -103,42 +108,12 @@ partial def List.inter (as bs: DBTable) : DBTable :=
     else if lessThan x y then List.inter xs bs'
     else List.inter as' ys
 
-partial def List.minusHelper (as bs: DBTable) : DBTable :=
-  match as, bs with
-  | [], _ => []
-  | xs, [] => xs
-  | x :: xs, y:: ys =>
-    if x == y then
-     List.minusHelper xs ys
-    else if lessThan x y then
-      x::List.minusHelper xs bs
-    else
-      List.minusHelper as ys
-
-partial def List.minus (as bs: DBTable) : DBTable :=
-  let as' := List.mergeSort as lessThan
-  let bs' := List.mergeSort bs lessThan
-  dbg_trace s!"as': {as'}"
-  dbg_trace s!"bs': {bs'}"
-  let result := List.minusHelper as' bs'
-  dbg_trace s!"minus result: [{result}]"
+partial def List.minus {α : Type} [BEq α] [Hashable α] (as bs: List α) : List α :=
+  let pairs := as.map (fun x => (x, as.count x - bs.count x))
+  let filter := pairs.filter (fun (_,n) => n > 0)
+  let distinct := removeDuplicates filter
+  let result := distinct.flatMap (fun (x,n) => List.replicate n x)
   result
-
-def as' : DBTable := [[.boolValue false,.intValue (some 30),.stringValue "Mixed"], [.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
-def bs' : DBTable := [[.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
-
-#eval List.minus as' bs'
-
-def List.product (xs : DBTable) (ys : DBTable) : DBTable :=
-  xs.flatMap (fun x => ys.map (fun y => List.append x y))
-
-
-def t1 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
-def t2 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
-
-#eval List.inter t1 t2
-#eval List.minus t1 t2
-#eval List.product t1 t2
 
 def DatabaseInstance := HashMap String DBTable
 
@@ -162,10 +137,27 @@ instance : Hashable DBRow where
   hash lst := lst.foldl (fun acc x => mixHash acc (hash x)) 0
 
 
--- Function to remove duplicates
-def removeDuplicates {α : Type} [BEq α] [Hashable α] (lst : List α) : List α :=
-  let hashSet := lst.foldl (fun acc x => acc.insert x) HashSet.empty
-  hashSet.toList
+#eval List.minus [1,2,2,2,2,2,4] [1,2]
+
+def as' : DBTable := [[.boolValue false,.intValue (some 30),.stringValue "Mixed"], [.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
+def bs' : DBTable := [[.boolValue true, .intValue (some 15),.stringValue "lower"], [.boolValue true, .intValue (some 10),.stringValue "UPPER"]]
+
+#eval List.minus as' bs'
+
+def List.product (xs : DBTable) (ys : DBTable) : DBTable :=
+  xs.flatMap (fun x => ys.map (fun y => List.append x y))
+
+
+def t1 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
+def t2 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
+
+#eval List.inter t1 t2
+#eval List.minus t1 t2
+#eval List.product t1 t2
+
+
+
+
 
 -- Example usage
 def myList : List Nat := [1, 2, 2, 3, 4, 4, 5]
@@ -501,7 +493,7 @@ def q2: Query :=
   let filter := .filter (.lsInt (.column 1) (.intLiteral 25)) project
   filter
 
-def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .left (.intEqual (.column 1) (.column 4))
+def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
 
 #eval semantics .bag d q1
 #eval semantics .bag d q2
