@@ -754,27 +754,14 @@ partial def trStringExpr (e: Env) (t: cvc5.Term) (s: StringExpr): Option cvc5.Te
  | .substring a b c => none
 
 partial def trIntExpr (e: Env) (t: cvc5.Term) (s: IntExpr): Option cvc5.Term :=
-sorry
-
-
-partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
-  match s with
-  | .column index => mkTupleSelect e t.getSort t index
-  | .stringLiteral v => e.tm.mkString v |>.toOption
-  | .intLiteral v => e.tm.mkInteger v
-  | .boolLiteral v => e.tm.mkBoolean v
-  | .nullLiteral b => match b with
-    | .bigint => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getIntegerSort)
-    | .integer => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getIntegerSort)
-    | .boolean => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
-    | .varchar _ => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
-    | _ => none
-  | .exists query =>
-    let query' := (trQuery e query) |>.get!
-    isNotEmpty e query'
-  | .case condition thenExpr elseExpr  =>
-    let terms := ((#[condition, thenExpr, elseExpr].map (trExpr e t)).filterMap id)
-    --dbg_trace s!"terms: {terms}";
+match s with
+ | .column index => mkTupleSelect e t.getSort t index
+ | .intLiteral v => e.tm.mkInteger v
+ | .nullInt => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
+ | .case condition thenExpr elseExpr  =>
+    let list := [thenExpr, elseExpr].map (trIntExpr e t)
+    let condition' := trBoolExpr e t condition
+    let terms := ([condition'] ++ list).filterMap id
     let thenTerm := terms[1]!
     let elseTerm := terms[2]!
     let thenElse := #[thenTerm, elseTerm]
@@ -782,54 +769,21 @@ partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
     let nullableTerms := if needsLifting
       then thenElse.map (fun x => if x.getSort.isNullable then x else e.tm.mkNullableSome! x)
       else thenElse
-    --dbg_trace s!"nullableTerms: {nullableTerms}";
     let condition' := if terms[0]!.getSort.isNullable then
                        (e.tm.mkNullableIsSome! terms[0]!).and! (e.tm.mkNullableVal! terms[0]!)
                       else  terms[0]!
     e.tm.mkTerm! .ITE (#[condition'] ++ nullableTerms)
-  | .application op args =>
-    let terms := ((args.map (trExpr e t)).filterMap id)
-    let needsLifting := terms.any (fun t => t.getSort.isNullable)
-    let nullableTerms := if needsLifting
-      then terms.map (fun t => if t.getSort.isNullable then t else e.tm.mkNullableSome! t)
-      else terms
-    let arg0 := nullableTerms[0]!
-    match op with
-    | "=" => liftIfNullable e needsLifting .EQUAL nullableTerms
-    | "<>" => liftIfNullable e needsLifting .DISTINCT nullableTerms
-    | "+" => liftIfNullable e needsLifting .ADD nullableTerms
-    | "-" => liftIfNullable e needsLifting .SUB nullableTerms
-    | "*" => liftIfNullable e needsLifting .MULT nullableTerms
-    | ">" => if isIntegerOrNullableInteger arg0
-             then liftIfNullable e needsLifting .GT nullableTerms
-             else liftIfNullable e needsLifting .STRING_LT #[nullableTerms[1]!, arg0]
-    | "<" => if isIntegerOrNullableInteger arg0
-             then liftIfNullable e needsLifting .LT nullableTerms
-             else liftIfNullable e needsLifting .STRING_LT nullableTerms
-    | ">=" => if isIntegerOrNullableInteger arg0
-              then liftIfNullable e needsLifting .GEQ nullableTerms
-              else liftIfNullable e needsLifting .STRING_LEQ #[nullableTerms[1]!, arg0]
-    | "<=" => if isIntegerOrNullableInteger arg0
-              then liftIfNullable e needsLifting .LEQ nullableTerms
-              else liftIfNullable e needsLifting .STRING_LEQ nullableTerms
-    | "UPPER" => liftIfNullable e needsLifting .STRING_TO_UPPER nullableTerms
-    | "||" => liftIfNullable e needsLifting .STRING_CONCAT nullableTerms
-    | "IS NULL" => if needsLifting
-                   then e.tm.mkNullableIsNull! arg0
-                   else e.tm.mkBoolean false
-    | "IS NOT NULL" => if needsLifting
-                   then e.tm.mkNullableIsSome! arg0
-                   else e.tm.mkBoolean true
-    | "IS TRUE" => if needsLifting
-                   then (e.tm.mkNullableIsSome! arg0).and! (e.tm.mkNullableVal! arg0)
-                   else arg0
-    | "IS NOT TRUE" => if needsLifting
-                   then (e.tm.mkNullableIsNull! arg0).or! (e.tm.mkNullableVal! arg0).not!
-                   else e.tm.mkTerm! .NOT #[arg0]
-    | "NOT" => liftIfNullable e needsLifting .NOT nullableTerms
-    | "AND" => trAnd e needsLifting nullableTerms
-    | "OR" => trOr e needsLifting nullableTerms
-    | _ => none
+ | .plus a b => trIntArgs e .ADD t [a,b]
+ | .minus a b => trIntArgs e .SUB t [a,b]
+ | .multiplication a b => trIntArgs e .MULT t [a,b]
+ | .division a b => trIntArgs e .INTS_DIVISION t [a,b]
+
+
+partial def trExpr (e: Env) (t: cvc5.Term) (s: Expr): Option cvc5.Term :=
+  match s with
+  | .boolExpr a => trBoolExpr e t a
+  | .intExpr a => trIntExpr e t a
+  | .stringExpr a => trStringExpr e t a
 
 end
 
