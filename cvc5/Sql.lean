@@ -64,8 +64,8 @@ inductive Query where
 
 inductive StringExpr : Type where
   | column (index : Nat) : StringExpr
-  | stringLiteral (value : String) : StringExpr
-  | nullString : StringExpr
+  | literal (value : String) : StringExpr
+  | null : StringExpr
   | case (condition : BoolExpr) (thenExpr elseExpr: StringExpr) : StringExpr
   | upper (a : StringExpr) : StringExpr
   | lower (a : StringExpr) : StringExpr
@@ -75,8 +75,8 @@ inductive StringExpr : Type where
 
 inductive IntExpr : Type where
   | column (index : Nat) : IntExpr
-  | intLiteral (value : Int) : IntExpr
-  | nullInt : IntExpr
+  | literal (value : Int) : IntExpr
+  | null : IntExpr
   | case (condition : BoolExpr) (thenExpr elseExpr: IntExpr) : IntExpr
   | plus (a b : IntExpr) : IntExpr
   | minus (a b : IntExpr) : IntExpr
@@ -86,8 +86,8 @@ inductive IntExpr : Type where
 
 inductive BoolExpr : Type where
   | column (index : Nat) : BoolExpr
-  | nullBool : BoolExpr
-  | boolLiteral (value : Bool) : BoolExpr
+  | null : BoolExpr
+  | literal (value : Bool) : BoolExpr
   | exists (Query : Query) : BoolExpr
   | case (condition thenExpr elseExpr: BoolExpr) : BoolExpr
   | stringEqual (a b : StringExpr) : BoolExpr

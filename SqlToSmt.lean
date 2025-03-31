@@ -12,7 +12,7 @@ structure Env where
   map: HashMap String cvc5.Term := HashMap.empty
   semantics : SQLSemantics
   n : (Option Nat) := none
-  constraints: Array cvc5.Term := #[]
+  constraints: List cvc5.Term := []
 
 
 
@@ -94,7 +94,7 @@ def trBasetype (e: Env) (b: Basetype) : Option cvc5.Sort :=
   match b with
   | .integer => e.tm.getIntegerSort
   | .boolean => e.tm.getBooleanSort
-  | .varchar (_: Nat) => e.tm.getStringSort
+  | .text => e.tm.getStringSort
 
 def trSqlType (e: Env) (d: SqlType) : Option cvc5.Sort :=
   let .sqlType base isNullable := d
@@ -345,7 +345,7 @@ def isNotEmpty (e: Env) (t : cvc5.Term) : Option cvc5.Term :=
   let notEmpty := e.tm.mkTerm! .DISTINCT #[t,empty]
   notEmpty
 
-def trUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+def trUnique (e: Env) (name baseTable: String) (columns : List Nat) : cvc5.Term :=
   dbg_trace s!";; {name}";
   let table := e.map[baseTable]!
   let sort := getTupleSort e table.getSort
@@ -374,7 +374,7 @@ def trUnique (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term
   dbg_trace s!"(assert {xAll})";
   xAll
 
-def trPrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Term :=
+def trPrimary (e: Env) (name baseTable: String) (columns : List Nat) : cvc5.Term :=
   dbg_trace s!";; {name}";
   let table := e.map[baseTable]!
   let sort := getTupleSort e table.getSort
@@ -404,10 +404,10 @@ def trPrimary (e: Env) (name baseTable: String) (columns : Array Nat) : cvc5.Ter
   dbg_trace s!"(assert {and})";
   and
 
-def trForeign (e : Env) (name child parent : String) (childColumns parentColumns :Array Nat): cvc5.Term :=
+def trForeign (e : Env) (name child parent : String) (childColumns parentColumns :List Nat): cvc5.Term :=
   dbg_trace s!";; {name}";
   let (childTerm, parentTerm) := (e.map[child]!,e.map[parent]!)
-  let filter : Array Nat → cvc5.Term → cvc5.Term :=
+  let filter : List Nat → cvc5.Term → cvc5.Term :=
     fun indices table =>
     let sort := getTupleSort e table.getSort
     let t := e.tm.mkVar sort "t" |>.toOption.get!
@@ -427,8 +427,8 @@ def trForeign (e : Env) (name child parent : String) (childColumns parentColumns
     else table
   let childFilter := filter childColumns childTerm
   let parentFilter := filter parentColumns parentTerm
-  let childOp := e.tm.mkOpOfIndices (getProjectKind e) childColumns |>.toOption.get!
-  let parentOp := e.tm.mkOpOfIndices (getProjectKind e) parentColumns |>.toOption.get!
+  let childOp := e.tm.mkOpOfIndices (getProjectKind e) childColumns.toArray |>.toOption.get!
+  let parentOp := e.tm.mkOpOfIndices (getProjectKind e) parentColumns.toArray |>.toOption.get!
   let childProject := e.tm.mkTermOfOp childOp #[childFilter] |>.toOption.get!
   let parentProject := e.tm.mkTermOfOp parentOp #[parentFilter] |>.toOption.get!
   let subset := mkQueryOp e (getSubsetKind e) childProject parentProject
@@ -477,7 +477,7 @@ partial def trFilter (e: Env) (condition: BoolExpr) (query: Query) : Option cvc5
   let query' := trQuery e query |>.get!
   let tupleSort := getTupleSort e query'.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := trExpr e t condition |>.get!
+  let condition' := trBoolExpr e t condition |>.get!
   let predicate := if condition'.getSort.isNullable
                 then
                 let isSome := e.tm.mkNullableIsSome! condition'
@@ -511,16 +511,20 @@ partial def trProject (e: Env) (exprs: List Expr) (query: Query) : Option cvc5.T
   let tupleSort := getTupleSort e query'.getSort
 --dbg_trace s!"tupleSort: {tupleSort}";
   let isProject := exprs.all (fun x => match x with
-    | .column _ => true
+    | .boolExpr (.column _) => true
+    | .intExpr (.column _) => true
+    | .stringExpr (.column _) => true
     | _ => false)
 --dbg_trace s!"isProject: {isProject}";
 --dbg_trace s!"(projectKind, mapKind): {projectKind}, {mapKind}";
   if isProject then
   let indices := exprs.map (fun x => match x with
-    | .column i => i
+    | .boolExpr (.column i) => i
+    | .intExpr (.column i) => i
+    | .stringExpr (.column i) => i
     | _ => panic! "not an indexed column")
 --dbg_trace s!"indices: {indices}";
-  let op := e.tm.mkOpOfIndices (getProjectKind e) indices |>.toOption.get!
+  let op := e.tm.mkOpOfIndices (getProjectKind e) indices.toArray |>.toOption.get!
 --dbg_trace s!"op: {op}";
 --dbg_trace s!"query: {repr query}";
 --dbg_trace s!"query': {query'}";
@@ -541,7 +545,7 @@ partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolE
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
-  let condition' := trExpr e t condition |>.get!
+  let condition' := trBoolExpr e t condition |>.get!
   -- let simplified := e.s.simplifyTerm condition' false |>.toOption.get!
   -- let value := simplified.getBooleanValue!
   -- let product' :=
@@ -576,12 +580,12 @@ partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolE
     join'
 
 
-partial def trTupleExpr (e: Env) (exprs: Array Expr) (t : cvc5.Term) : Option cvc5.Term :=
+partial def trTupleExpr (e: Env) (exprs: List Expr) (t : cvc5.Term) : Option cvc5.Term :=
   let terms := exprs.map (fun expr => trExpr e t expr)
   if terms.any (fun t => t.isNone) then none
   else
   let
-  tuple := e.tm.mkTuple! (terms.filterMap id)
+  tuple := e.tm.mkTuple! (terms.filterMap id).toArray
   let boundList := e.tm.mkTerm! .VARIABLE_LIST #[t]
   let lambda := e.tm.mkTerm! .LAMBDA #[boundList, tuple]
   lambda
@@ -616,8 +620,8 @@ partial def trIntArgs (e: Env) (k: cvc5.Kind) (t: cvc5.Term) (args : List IntExp
 partial def trBoolExpr (e: Env) (t: cvc5.Term) (s: BoolExpr): Option cvc5.Term :=
 match s with
   | .column index => mkTupleSelect e t.getSort t index
-  | .boolLiteral v => e.tm.mkBoolean v
-  | .nullBool => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
+  | .literal v => e.tm.mkBoolean v
+  | .null => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getBooleanSort)
   | .exists query =>
     let query' := (trQuery e query) |>.get!
     isNotEmpty e query'
@@ -724,8 +728,8 @@ match s with
 partial def trStringExpr (e: Env) (t: cvc5.Term) (s: StringExpr): Option cvc5.Term :=
  match s with
  | .column index => mkTupleSelect e t.getSort t index
- | .stringLiteral v => e.tm.mkString v |>.toOption
- | .nullString => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
+ | .literal v => e.tm.mkString v |>.toOption
+ | .null => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
  | .case condition thenExpr elseExpr  =>
     let list := [thenExpr, elseExpr].map (trStringExpr e t)
     let condition' := trBoolExpr e t condition
@@ -756,8 +760,8 @@ partial def trStringExpr (e: Env) (t: cvc5.Term) (s: StringExpr): Option cvc5.Te
 partial def trIntExpr (e: Env) (t: cvc5.Term) (s: IntExpr): Option cvc5.Term :=
 match s with
  | .column index => mkTupleSelect e t.getSort t index
- | .intLiteral v => e.tm.mkInteger v
- | .nullInt => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
+ | .literal v => e.tm.mkInteger v
+ | .null => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
  | .case condition thenExpr elseExpr  =>
     let list := [thenExpr, elseExpr].map (trIntExpr e t)
     let condition' := trBoolExpr e t condition
@@ -832,7 +836,7 @@ def test1 := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let e: Env := {tm:= tm, s := s, semantics := .bag}
-  let x := trSqlType e (.datatype .boolean true)
+  let x := trSqlType e (.sqlType .boolean true)
   let y := tm.mkTupleSort! #[x.get!]
   let tTuple := tm.mkNullableSome! (tm.mkBoolean true)
   let fTuple := tm.mkNullableSome! (tm.mkBoolean false)
@@ -842,27 +846,27 @@ def test1 := do
 
 
 def schema : DatabaseSchema :=
-  { baseTables := #[
-      { name := "users", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.integer true },
-          { index := 1, datatype := Datatype.datatype Basetype.integer true },
-          { index := 2, datatype := Datatype.datatype Basetype.text true },
-          { index := 3, datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
+  { baseTables := [
+      { name := "users", columns := [
+          { index := 0, sqlType := .sqlType .integer true },
+          { index := 1, sqlType := .sqlType .integer true },
+          { index := 2, sqlType := .sqlType .text true },
+          { index := 3, sqlType := .sqlType .integer true }
         ]
       },
-      { name := "posts", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.integer false },
-          { index := 1, datatype := Datatype.datatype Basetype.integer false },
-          { index := 2, datatype := Datatype.datatype (Basetype.varchar 10) true },
-          { index := 3, datatype := Datatype.datatype (Basetype.varchar 20) true },
-          { index := 4, datatype := Datatype.datatype (Basetype.timestampWithoutTimeZone 0) true }
+      { name := "posts", columns := [
+          { index := 0, sqlType := .sqlType .integer false },
+          { index := 1, sqlType := .sqlType .integer false },
+          { index := 2, sqlType := .sqlType .text true },
+          { index := 3, sqlType := .sqlType .text true },
+          { index := 4, sqlType := .sqlType .integer true }
         ]
       }
     ]
   }
 
 instance : Inhabited BaseTable where
-  default := { name := "", columns := #[] }
+  default := { name := "", columns := [] }
 
 def test2 (isBag : Bool) := do
   let tm ← TermManager.new
@@ -888,14 +892,14 @@ def test3 (isBag : Bool) := do
 --#eval test3 false
 
 
-def test4 (simplify: Bool) (value: Bool) (op: String) := do
+def test4 (simplify: Bool) (value: Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e: Env := {tm:= tm, s := s, semantics := .bag}
-  let nullLiteral := Expr.nullLiteral .boolean
-  let x := Expr.boolLiteral value
-  let andExpr := Expr.application op #[nullLiteral, x]
+  let e: Env := {tm:= tm, s := s2.snd, semantics := .bag}
+  let nullLiteral := BoolExpr.null
+  let x := BoolExpr.literal value
+  let andExpr := Expr.boolExpr (.and nullLiteral x)
   let query := (e.tm.mkBoolean true)
   let z : Option cvc5.Term := trExpr e query andExpr
   let z' := z.get!
@@ -907,26 +911,26 @@ def test4 (simplify: Bool) (value: Bool) (op: String) := do
 
 
 
---#eval test4 true true "AND"
---#eval test4 false true "AND"
---#eval test4 true true "OR"
---#eval test4 false true "OR"
+-- #eval test4 true true
+-- #eval test4 false true
+-- #eval test4 true true
+-- #eval test4 false true
 
---#eval test4 true false "AND"
---#eval test4 false false "AND"
---#eval test4 true false "OR"
---#eval test4 false false "OR"
+-- #eval test4 true false
+-- #eval test4 false false
+-- #eval test4 true false
+-- #eval test4 false false
 
 
-def test5 (simplify: Bool) (value: Bool) (op: String) := do
+def test5 (simplify: Bool) (value: Bool) := do
   let tm ← TermManager.new
   let s := (Solver.new tm)
   let s2 ← s.setOption "dag-thresh" "0"
-  let e: Env := {tm:= tm, s := s, semantics := .bag}
-  let x := Expr.boolLiteral value
-  let expr := Expr.application op #[x]
+  let e: Env := {tm:= tm, s := s2.snd, semantics := .bag}
+  let x := BoolExpr.literal value
+  let expr := BoolExpr.not x
   let query := (e.tm.mkBoolean true)
-  let z : Option cvc5.Term := trExpr e query expr
+  let z : Option cvc5.Term := trBoolExpr e query expr
   let z' := z.get!
   if simplify then
     let z'' ← e.s.simplify z' false
@@ -934,10 +938,10 @@ def test5 (simplify: Bool) (value: Bool) (op: String) := do
   else
     return .ok z'
 
---#eval test5 false false "NOT"
---#eval test5 true false "NOT"
---#eval test5 false true "NOT"
---#eval test5 true true "NOT"
+-- #eval test5 false false
+-- #eval test5 true false
+-- #eval test5 false true
+-- #eval test5 true true
 
 
 
@@ -948,12 +952,12 @@ def testValues (isBag : Bool) := do
   let s2 ← s.setOption "dag-thresh" "0"
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
-  let t : Query := .values #[#[.intLiteral 1, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1],
-                                #[.intLiteral 2, .stringLiteral "hello", .stringLiteral "world", .intLiteral 1]]
-                                #[.datatype .integer false,
-                                .datatype (.varchar 20) false,
-                                .datatype (.varchar 20) false,
-                                .datatype .integer false]
+  let t : Query := .values [[.intExpr (.literal 1),.stringExpr (.literal "hello"),.stringExpr (.literal "world"),.intExpr (.literal 1)],
+                            [.intExpr (.literal 2),.stringExpr (.literal "hello"),.stringExpr (.literal "world"),.intExpr (.literal 1)]]
+                                [.sqlType .integer false,
+                                .sqlType .text false,
+                                .sqlType .text false,
+                                .sqlType .integer false]
   let w := trQuery z t
   return w
 
@@ -967,7 +971,7 @@ def testProjection (isBag : Bool) := do
   let e: Env := {tm:= tm, s := s2.snd, semantics := if isBag then .bag else .set}
   let z := trSchema e schema
   let t : Query := .project #[.column 0, .column 1,
-  .stringLiteral "hello", .application "+" #[.intLiteral 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
+  .literal "hello", .application "+" #[.literal 1, .application "+" #[.column 0, .column 1]]] (.baseTable "posts")
   let w := trQuery z t
   return w
 
@@ -1106,9 +1110,9 @@ def testExists (isBag : Bool) := do
 def schema2 : DatabaseSchema :=
   { baseTables := #[
       { name := "users", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.boolean true },
-          { index := 1, datatype := Datatype.datatype Basetype.integer true },
-          { index := 2, datatype := Datatype.datatype Basetype.integer false }
+          { index := 0, sqlType := SqlType.sqlType Basetype.boolean true },
+          { index := 1, sqlType := SqlType.sqlType Basetype.integer true },
+          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
         ]
       }
     ]
@@ -1135,15 +1139,15 @@ def testCaseStatement  := do
 def schema3 : DatabaseSchema :=
   { baseTables := #[
       { name := "users", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.integer true },
-          { index := 1, datatype := Datatype.datatype Basetype.integer false },
-          { index := 2, datatype := Datatype.datatype Basetype.integer false }
+          { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
+          { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
+          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
         ]
       },
       { name := "child", columns := #[
-          { index := 0, datatype := Datatype.datatype Basetype.integer true },
-          { index := 1, datatype := Datatype.datatype Basetype.integer false },
-          { index := 2, datatype := Datatype.datatype Basetype.integer false }
+          { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
+          { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
+          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
         ]
       }
     ],
@@ -1151,7 +1155,7 @@ def schema3 : DatabaseSchema :=
       .unique "uq" "users" #[0,1],
       .primaryKey "pq" "users" #[0,1],
       .foreignKey "fk" "child" "users" #[0,1] #[1,0],
-      .check "ck" "users" (.application ">" #[.column 0, .intLiteral 0])
+      .check "ck" "users" (.application ">" #[.column 0, .literal 0])
     ]
   }
 

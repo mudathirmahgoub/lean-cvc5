@@ -191,8 +191,8 @@ instance : ToString BoolExpr where
   toString expr :=
     match expr with
     | .column i => s!"column {i}"
-    | .nullBool => "nullBool"
-    | .boolLiteral v => s!"boolLiteral {v}"
+    | .null => "null"
+    | .literal v => s!"literal {v}"
     -- | .exists q => s!"exists {q}"
     -- | .case c t e => s!"case {c} {t} {e}"
     | _ => "unknown"
@@ -207,8 +207,8 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
   | .column i => match x.get! i with
     | .boolValue v => v
     | _ => none
-  | .nullBool => none
-  | .boolLiteral v => v
+  | .null => none
+  | .literal v => v
   | .exists q => !(semantics s d q).isEmpty
   | .case c t e =>
     let c' := semanticsBoolExpr s d c
@@ -325,8 +325,8 @@ partial def semanticsIntExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Int
  | .column i => match x.get! i with
     | .intValue v => v
     | _ => none
- | .nullInt => none
- | .intLiteral v => v
+ | .null => none
+ | .literal v => v
  | .plus a b =>
     let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
     match a', b' with
@@ -367,8 +367,8 @@ partial def semanticsStringExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: 
  | .column i => match x.get! i with
     | .stringValue v => v
     | _ => none
- | .nullString => none
- | .stringLiteral v => v
+ | .null => none
+ | .literal v => v
  | .upper a =>
     match semanticsStringExpr s d a x with
     | some str => str.toUpper
@@ -486,13 +486,13 @@ def d: DatabaseInstance := (HashMap.empty.insert "table1" table1).insert "table2
 
 def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table1")
 def q2: Query :=
-  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.intLiteral 2))] (.baseTable "table")
-  let filter := .filter (.lsInt (.column 1) (.intLiteral 25)) project
+  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table")
+  let filter := .filter (.lsInt (.column 1) (.literal 25)) project
   filter
 
 def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
 
-def q4 : Query := .values [[.boolExpr (.nullBool), .intExpr (.nullInt), .stringExpr (.nullString)]]
+def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)]]
                           [.sqlType .boolean true, .sqlType .integer true, .sqlType .text true ]
 
 #eval semantics .bag d q1
