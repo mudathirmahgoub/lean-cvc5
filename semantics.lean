@@ -94,11 +94,16 @@ partial def List.minus (as bs: DBTable) : DBTable :=
     else if lessThan x y then x::List.minus xs bs'
     else List.minus as' ys
 
+def List.product (xs : DBTable) (ys : DBTable) : DBTable :=
+  xs.flatMap (fun x => ys.map (fun y => List.append x y))
+
+
 def t1 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
 def t2 : DBTable := [[.intValue (some 100)],[.intValue (some 10)],[.intValue (some 10)],[.intValue (some 15)]]
 
 #eval List.inter t1 t2
 #eval List.minus t1 t2
+#eval List.product t1 t2
 
 def DatabaseInstance := HashMap String DBTable
 
@@ -199,6 +204,25 @@ partial def semanticsBoolExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: Bo
     match a', b' with
     | some x, some y => x == y
     | _, _ => none
+  |.and a b =>
+    let (a', b') :=  (semanticsBoolExpr s d a x, semanticsBoolExpr s d b x)
+    match a', b' with
+    | some x, some y => x && y
+    | some false, none => false
+    | none, some false => false
+    | _, _ => none
+  |.or a b =>
+    let (a', b') :=  (semanticsBoolExpr s d a x, semanticsBoolExpr s d b x)
+    match a', b' with
+    | some x, some y => x || y
+    | some true, none => true
+    | none, some true => true
+    | _, _ => none
+  |.not a =>
+    let a' := semanticsBoolExpr s d a x
+    match a' with
+    | some x => not x
+    | none => none
   | .lsInt a b =>
     let (a', b') := (semanticsIntExpr s d a x, semanticsIntExpr s d b x)
     match a', b' with
@@ -360,13 +384,24 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
    let f' := fun x : DBRow => f.map (fun g => g x)
    let q'' := List.map f' q'
    q''
-  | .join l r join condition => []
+  | .join l r join condition =>
+    let (l', r') := (semantics s d l, semantics s d r)
+    let product := List.product l' r'
+    let p := semanticsBoolExpr s d condition
+    let result := List.filter (fun x => (p x).isSome ∧ (p x).get!) product
+    if product.isEmpty then product
+    else
+    match join with
+     | .inner => result
+     | .left =>
+       let nulls :=
+     | .right => []
+     | .full => []
   | .filter condition q =>
-   let q' := semantics s d q
-   let p := semanticsBoolExpr s d condition
-   let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
-   q''
-
+    let q' := semantics s d q
+    let p := semanticsBoolExpr s d condition
+    let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
+    q''
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
   | .values rows types => []
 

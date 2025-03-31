@@ -16,8 +16,6 @@ structure Env where
 
 
 
-def getIndices (n : Nat) : Array Nat :=
-  Array.mkArray n 0 |>.mapIdx (fun i _ => i)
 
 def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
   match e.semantics with

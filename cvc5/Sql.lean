@@ -57,7 +57,7 @@ mutual
 inductive Query where
   | baseTable (name : String) : Query
   | project (expr: Array Expr) (query: Query) : Query
-  | join (l: Query) (r: Query) (join : Join) (condition: Expr) : Query
+  | join (l: Query) (r: Query) (join : Join) (condition: BoolExpr) : Query
   | filter (condition: BoolExpr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
   | values (rows: Array (Array Expr)) (types: Array SqlType) : Query
@@ -94,6 +94,9 @@ inductive BoolExpr : Type where
   | stringEqual (a b : StringExpr) : BoolExpr
   | intEqual (a b : IntExpr) : BoolExpr
   | boolEqual (a b : BoolExpr) : BoolExpr
+  | and (a b : BoolExpr) : BoolExpr
+  | or (a b : BoolExpr) : BoolExpr
+  | not (a : BoolExpr) : BoolExpr
   | isNullString (a : StringExpr) : BoolExpr
   | isNotNullString (a : StringExpr) : BoolExpr
   | isNullInt (a : IntExpr) : BoolExpr
@@ -148,3 +151,8 @@ instance : ToString Expr where
 instance : ToString (Array Expr) where
   toString arr :=
     "[" ++ String.intercalate ", " (arr.toList.map toString) ++ "]"
+
+
+
+def getIndices (n : Nat) : Array Nat :=
+  Array.mkArray n 0 |>.mapIdx (fun i _ => i)
