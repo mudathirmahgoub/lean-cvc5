@@ -458,7 +458,7 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
     let q'' := List.filter (fun x => (p x).isSome ∧ (p x).get!) q'
     q''
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
-  | .values rows  => rows.map (fun row => row.map (fun e =>
+  | .values rows _ => rows.map (fun row => row.map (fun e =>
     match e with
     | .boolExpr e' => .boolValue (semanticsBoolExpr s d e' [])
     | .stringExpr e' => .stringValue (semanticsStringExpr s d e' [])
@@ -493,6 +493,7 @@ def q2: Query :=
 def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
 
 def q4 : Query := .values [[.boolExpr (.nullBool), .intExpr (.nullInt), .stringExpr (.nullString)]]
+                          [.sqlType .boolean true, .sqlType .integer true, .sqlType .text true ]
 
 #eval semantics .bag d q1
 #eval semantics .bag d q2

@@ -13,7 +13,7 @@ inductive TimePart where | Year | Month  | Day
 
 inductive Basetype where
   | boolean
-  | varchar (size: Nat)
+  | text
   | integer
   deriving Repr
 
@@ -59,7 +59,7 @@ inductive Query where
   | join (l: Query) (r: Query) (join : Join) (condition: BoolExpr) : Query
   | filter (condition: BoolExpr) (query: Query) : Query
   | queryOperation (op: QueryOp) (l: Query) (r: Query) : Query
-  | values (rows: List (List Expr)) : Query
+  | values (rows: List (List Expr)) (sqlTypes: List SqlType): Query
   deriving Repr
 
 inductive StringExpr : Type where
@@ -138,7 +138,7 @@ structure DatabaseSchema where
 instance : ToString Basetype where
   toString
     | .boolean => "boolean"
-    | .varchar size => s!"varchar({size})"
+    | .text => s!"text"
     | .integer => s!"integer"
 
 instance : ToString Expr where
@@ -154,5 +154,5 @@ instance : ToString (List Expr) where
 def sqlType (e : Expr) : SqlType :=
 match e with
 | .boolExpr _ => SqlType.sqlType Basetype.boolean true
-| .stringExpr _ => SqlType.sqlType (Basetype.varchar 255) true
+| .stringExpr _ => SqlType.sqlType (.text) true
 | .intExpr _ => SqlType.sqlType Basetype.integer true

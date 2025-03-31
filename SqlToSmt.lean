@@ -450,7 +450,7 @@ partial def trQuery (e: Env) (Query: Query) : Option cvc5.Term :=
   | .baseTable name =>
     -- dbg_trace s!" .baseTable name: {name} and e: {e}, e.map[name]: {e.map[name]?}";
     e.map[name]?
-  | .values rows => trValues e rows
+  | .values rows sqlTypes => trValues e rows sqlTypes
   | .project exprs query =>
     -- dbg_trace s!" .project exprs:  query: ";
     trProject e exprs query
@@ -458,14 +458,14 @@ partial def trQuery (e: Env) (Query: Query) : Option cvc5.Term :=
   | .queryOperation op l r => trQueryOperation e op l r
   | .join l r j c => trJoin e l r j c
 
-partial def trValues (e: Env) (rows: List (List Expr)): Option cvc5.Term :=
+partial def trValues (e: Env) (rows: List (List Expr)) (sqlTypes: List SqlType): Option cvc5.Term :=
   let tuples := rows.map (fun row =>
     let null:= (cvc5.Term.null .unit)
     let f := (fun expr => trExpr e null expr)
-                          let elements := row.map f |>.filterMap id
-                          e.tm.mkTuple! elements)
-  let sorts := types.map (fun t => trSqlType e t) |>.filterMap id
-  let tupleSort := e.tm.mkTupleSort! sorts
+    let elements := row.map f |>.filterMap id
+    e.tm.mkTuple! elements.toArray)
+  let sorts := sqlTypes.map (fun t => trSqlType e t) |>.filterMap id
+  let tupleSort := e.tm.mkTupleSort! sorts.toArray
   let tableSort := mkTableSort e tupleSort
   let emptyTable := mkEmptyTable e tableSort
   let combine := fun (table : Option cvc5.Term) (tuple : cvc5.Term)  =>
