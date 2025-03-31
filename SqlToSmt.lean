@@ -722,7 +722,36 @@ match s with
     else e.tm.mkTerm! .NOT #[a']
 
 partial def trStringExpr (e: Env) (t: cvc5.Term) (s: StringExpr): Option cvc5.Term :=
-sorry
+ match s with
+ | .column index => mkTupleSelect e t.getSort t index
+ | .stringLiteral v => e.tm.mkString v |>.toOption
+ | .nullString => e.tm.mkNullableNull! (e.tm.mkNullableSort! e.tm.getStringSort)
+ | .case condition thenExpr elseExpr  =>
+    let list := [thenExpr, elseExpr].map (trStringExpr e t)
+    let condition' := trBoolExpr e t condition
+    let terms := ([condition'] ++ list).filterMap id
+    let thenTerm := terms[1]!
+    let elseTerm := terms[2]!
+    let thenElse := #[thenTerm, elseTerm]
+    let needsLifting := thenElse.any (fun x => x.getSort.isNullable)
+    let nullableTerms := if needsLifting
+      then thenElse.map (fun x => if x.getSort.isNullable then x else e.tm.mkNullableSome! x)
+      else thenElse
+    let condition' := if terms[0]!.getSort.isNullable then
+                       (e.tm.mkNullableIsSome! terms[0]!).and! (e.tm.mkNullableVal! terms[0]!)
+                      else  terms[0]!
+    e.tm.mkTerm! .ITE (#[condition'] ++ nullableTerms)
+ | .upper a =>
+   let a' := trStringExpr e t a |>.get!
+   liftIfNullable e a'.getSort.isNullable .STRING_TO_UPPER [a']
+ | .lower a =>
+   let a' := trStringExpr e t a |>.get!
+   liftIfNullable e a'.getSort.isNullable .STRING_TO_LOWER [a']
+ | .concat a b =>
+    let (a', b') := (trStringExpr e t a |>.get!, trStringExpr e t b |>.get!)
+    let (needsLifting, nullableTerms) := getNullableTerms e [a', b']
+    liftIfNullable e needsLifting .STRING_CONCAT nullableTerms
+ | .substring a b c => none
 
 partial def trIntExpr (e: Env) (t: cvc5.Term) (s: IntExpr): Option cvc5.Term :=
 sorry
