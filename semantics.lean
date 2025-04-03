@@ -465,3 +465,9 @@ def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.n
 #eval semantics .bag d q2
 #eval semantics .bag d q3
 #eval semantics .bag d q4
+
+
+def q:Query :=
+  .queryOperation .unionAll
+    (.queryOperation .exceptAll q1 q2)
+    (.queryOperation .exceptAll q1 q2)
