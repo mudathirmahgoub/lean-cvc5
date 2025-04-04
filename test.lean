@@ -11,13 +11,54 @@ def example1 : List Nat :=
 
 #eval example1 -- Outputs: [1, 2, 3, 4, 5]
 
--- Example: Sorting a list of strings
-def compareString (a b : String) : Ordering :=
-  if a < b then Ordering.lt
-  else if a > b then Ordering.gt
-  else Ordering.eq
+universe u v
+#check (@funext :
+           {α : Type u}
+         → {β : α → Type u}
+         → {f g : (x : α) → β x}
+         → (∀ (x : α), f x = g x)
+         → f = g)
 
-def example2 : List String :=
-  List.mergeSort ["apple", "banana", "cherry", "date"] compareString
+#print funext
 
-#eval example2 -- Outputs: ["apple", "banana", "cherry", "date"]
+namespace Hidden
+axiom propext {a b : Prop} : (a ↔ b) → a = b
+end Hidden
+
+
+
+def Set (α : Type u) := α → Prop
+namespace Set
+def mem (x : α) (a : Set α) := a x
+infix:50 (priority := high) "∈" => mem
+theorem setext {a b : Set α} (h : ∀ x, x ∈ a ↔ x ∈ b) : a = b :=
+  funext (fun x => propext (h x))
+def empty : Set α := fun x => False
+
+notation (priority := high) "∅" => empty
+
+def inter (a b : Set α) : Set α :=
+  fun x => x ∈ a ∧ x ∈ b
+
+infix:70 " ∩ " => inter
+
+theorem inter_self (a : Set α) : a ∩ a = a :=
+  setext fun x => Iff.intro
+    (fun ⟨h, _⟩ => h)
+    (fun h => ⟨h, h⟩)
+
+theorem inter_empty (a : Set α) : a ∩ ∅ = ∅ :=
+  setext fun x => Iff.intro
+    (fun ⟨_, h⟩ => h)
+    (fun h => False.elim h)
+
+theorem empty_inter (a : Set α) : ∅ ∩ a = ∅ :=
+  setext fun x => Iff.intro
+    (fun ⟨h, _⟩ => h)
+    (fun h => False.elim h)
+
+theorem inter.comm (a b : Set α) : a ∩ b = b ∩ a :=
+  setext fun x => Iff.intro
+    (fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩)
+    (fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩)
+end Set
