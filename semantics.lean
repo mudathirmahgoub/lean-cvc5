@@ -452,7 +452,7 @@ def d: DatabaseInstance := (HashMap.empty.insert "table1" table1).insert "table2
 
 def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table1")
 def q2: Query :=
-  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table")
+  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table1")
   let filter := .filter (.lsInt (.column 1) (.literal 25)) project
   filter
 

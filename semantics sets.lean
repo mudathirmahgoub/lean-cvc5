@@ -90,8 +90,8 @@ def unionDisjoint (t1 t2: DBTable) : DBTable :=
     (fun acc x n1 =>
      let n2 := DBTable.mul t2 x
      let n := n1 + n2
-     acc.insert x  n)
-    HashMap.empty
+     acc.insert x n)
+    t2
 
 def unionMax (t1 t2: DBTable) : DBTable :=
   t1.fold
@@ -99,7 +99,7 @@ def unionMax (t1 t2: DBTable) : DBTable :=
      let n2 := DBTable.mul t2 x
      let n := if n1 >= n2 then n1 else n2
      acc.insert x  n)
-    HashMap.empty
+    t2
 
 def differenceSubtract (t1 t2: DBTable) : DBTable :=
   t1.fold
@@ -121,7 +121,7 @@ def setof (t : DBTable) : DBTable :=
 
 
 def getAnyRow (t: DBTable) : Option DBRow :=
-  t.fold (fun acc _ _ => acc) none
+  t.fold (fun _ row _ => some row) none
 
 end DBTable
 
@@ -444,12 +444,14 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
   | .join l r join condition =>
     let (l', r') := (semantics s d l, semantics s d r)
     let product := DBTable.product l' r'
+    dbg_trace s!"product: {product}"
     let p := semanticsBoolExpr s d condition
     let result : DBTable := product.filter (fun x _ => (p x).isSome && (p x).get!)
+    dbg_trace s!"result: {result}"
     if product.isEmpty then product
     else
     let leftLength := l'.getAnyRow.get!.length
-    let rightLength := r'.getAnyRow.get!.length
+    dbg_trace s!"leftLength: {leftLength}"
     let nullsRow (t : DBRow) : DBRow :=
       t.map (fun x => match x with
           | .boolValue _ => .boolValue (none : Option Bool)
@@ -470,13 +472,18 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
       result.unionDisjoint minusNulls
      | .full =>
       let leftProject := result.mapRow (fun x => x.take leftLength)
+      dbg_trace s!"leftProject: {leftProject}"
       let minus1 := l'.differenceSubtract leftProject
+       dbg_trace s!"minus1: {minus1}"
       let nullsRight := nullsRow r'.getAnyRow.get!
+      dbg_trace s!"nullsRight: {nullsRight}"
       let nulls1 := minus1.mapRow (fun x => List.append x nullsRight)
+      dbg_trace s!"nulls1: {nulls1}"
       let rightProject := result.mapRow (fun x => x.drop leftLength)
       let minus2 := r'.differenceSubtract rightProject
       let nullsLeft := nullsRow l'.getAnyRow.get!
       let nulls2 := minus2.mapRow (fun x => List.append nullsLeft x)
+      dbg_trace s!"nulls2: {nulls2}"
       (result.unionDisjoint nulls1).unionDisjoint nulls2
   | .filter condition q =>
     let q' := semantics s d q
@@ -512,7 +519,7 @@ def d: DatabaseInstance := (HashMap.empty.insert "table1" table1).insert "table2
 
 def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table1")
 def q2: Query :=
-  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table")
+  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table1")
   let filter := .filter (.lsInt (.column 1) (.literal 25)) project
   filter
 
