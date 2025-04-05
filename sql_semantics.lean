@@ -126,7 +126,7 @@ def getAnyRow (t: DBTable) : Option DBRow :=
 end DBTable
 
 def List.toMap (lst : List (DBRow × Nat)) : DBTable :=
-  lst.foldl (λ acc (x,n) => acc.insert x n) HashMap.empty
+  lst.foldl (fun acc (x,n) => acc.insert x n) HashMap.empty
 
 instance : ToString DBValue where
   toString
