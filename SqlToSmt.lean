@@ -19,12 +19,14 @@ structure Env where
 
 def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
   match e.semantics with
-  | .bag => e.tm.mkEmptyBag! s
-  | .set => e.tm.mkEmptySet! s
+  | .bag => e.tm.mkEmptyBag! s -- (as bag.empty s)
+  | .set => e.tm.mkEmptySet! s -- (as set.empty s)
 
 def mkSingleton (e: Env) (tuple: cvc5.Term) : cvc5.Term :=
   match e.semantics with
+    -- (bag tuple 1)
   | .bag => e.tm.mkTerm! .BAG_MAKE #[tuple, e.tm.mkInteger 1]
+    -- (set.singleton tuple)
   | .set => e.tm.mkTerm! .SET_SINGLETON #[tuple]
 
 def printHashMap (map : HashMap String cvc5.Term) : String :=

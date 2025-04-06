@@ -444,14 +444,11 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
   | .join l r join condition =>
     let (l', r') := (semantics s d l, semantics s d r)
     let product := DBTable.product l' r'
-    dbg_trace s!"product: {product}"
     let p := semanticsBoolExpr s d condition
     let result : DBTable := product.filter (fun x _ => (p x).isSome && (p x).get!)
-    dbg_trace s!"result: {result}"
     if product.isEmpty then product
     else
     let leftLength := l'.getAnyRow.get!.length
-    dbg_trace s!"leftLength: {leftLength}"
     let nullsRow (t : DBRow) : DBRow :=
       t.map (fun x => match x with
           | .boolValue _ => .boolValue (none : Option Bool)
@@ -472,18 +469,13 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
       result.unionDisjoint minusNulls
      | .full =>
       let leftProject := result.mapRow (fun x => x.take leftLength)
-      dbg_trace s!"leftProject: {leftProject}"
       let minus1 := l'.differenceSubtract leftProject
-       dbg_trace s!"minus1: {minus1}"
       let nullsRight := nullsRow r'.getAnyRow.get!
-      dbg_trace s!"nullsRight: {nullsRight}"
       let nulls1 := minus1.mapRow (fun x => List.append x nullsRight)
-      dbg_trace s!"nulls1: {nulls1}"
       let rightProject := result.mapRow (fun x => x.drop leftLength)
       let minus2 := r'.differenceSubtract rightProject
       let nullsLeft := nullsRow l'.getAnyRow.get!
       let nulls2 := minus2.mapRow (fun x => List.append nullsLeft x)
-      dbg_trace s!"nulls2: {nulls2}"
       (result.unionDisjoint nulls1).unionDisjoint nulls2
   | .filter condition q =>
     let q' := semantics s d q
@@ -492,7 +484,7 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
     q''
   | .queryOperation op l r => semanticsQueryOp s op (semantics s d l) (semantics s d r)
   | .values rows _ =>
-      rows.foldl
+    let result : DBTable := rows.foldl
       (fun acc row =>
        let row' := row.map (fun e => match e with
          | .boolExpr e' => .boolValue (semanticsBoolExpr s d e' [])
@@ -500,6 +492,9 @@ partial def semantics (s : SQLSemantics) (d: DatabaseInstance) (q : Query) : DBT
          | .intExpr e' => .intValue (semanticsIntExpr s d e' []))
        acc.insert row' 1)
       HashMap.empty
+    match s with
+    | .bag => result
+    | .set => result.setof
 
 end
 
@@ -525,13 +520,15 @@ def q2: Query :=
 
 def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
 
-def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)]]
+def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)],
+                           [.boolExpr (.null), .intExpr (.null), .stringExpr (.null)]]
                           [.sqlType .boolean true, .sqlType .integer true, .sqlType .text true ]
 
 #eval semantics .bag d q1
 #eval semantics .bag d q2
 #eval semantics .bag d q3
 #eval semantics .bag d q4
+#eval semantics .set d q4
 
 
 def q:Query :=

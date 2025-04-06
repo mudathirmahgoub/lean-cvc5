@@ -247,45 +247,45 @@ def semantics (s : SQLSemantics) (d: DatabaseInstance) (t : cvc5.Term) : DBTable
     [(row ,t[1]!.getIntegerValue!.toNat)].toMap
   | .SET_UNION =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.unionMax t2).setof
   | .BAG_UNION_DISJOINT =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.unionDisjoint t2)
   | .BAG_UNION_MAX =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.unionMax t2)
   | .SET_INTER =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.inter t2).setof
   | .BAG_INTER_MIN =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.inter t2)
   | .SET_MINUS =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     t1.setof.differenceSubtract t2
   | .BAG_DIFFERENCE_SUBTRACT =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.differenceSubtract t2)
   | .BAG_DIFFERENCE_REMOVE =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.differenceRemove t2)
   | .BAG_SETOF =>
     let t := semantics s d t[0]!
     t.setof
   | .RELATION_PRODUCT =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.product t2)
   | .TABLE_PRODUCT =>
     let t1 := semantics s d t[0]!
-    let t2 := semantics s d t[0]!
+    let t2 := semantics s d t[1]!
     (t1.product t2)
   | _ => HashMap.empty
