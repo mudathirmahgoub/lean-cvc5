@@ -295,7 +295,6 @@ def liftTupleElements (e: Env) (t query: cvc5.Term) (targetSorts tupleSorts: Arr
 def mkQueryOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   let aElementSort := getTupleSort e a.getSort
   let bElementSort := getTupleSort e b.getSort
---dbg_trace s!"op: {op}";
   let aSorts := aElementSort.getTupleSorts!
   let bSorts := bElementSort.getTupleSorts!
   if aSorts == bSorts then
@@ -303,17 +302,12 @@ def mkQueryOp (e: Env) (op: cvc5.Kind) (a b: cvc5.Term) : cvc5.Term :=
   ret
   else
   let zip := aSorts.zip bSorts
---dbg_trace s!"zip: {zip}";
   let sorts := zip.map (fun (aSort, bSort) => if aSort == bSort then aSort
                         else if aSort.isNullable then aSort else bSort)
   let aVar := e.tm.mkVar aElementSort "t" |>.toOption.get!
   let bVar := e.tm.mkVar bElementSort "t" |>.toOption.get!
   let a' := if aSorts == sorts then a else liftTupleElements e aVar a sorts aSorts
   let b' := if bSorts == sorts then b else liftTupleElements e bVar b sorts bSorts
---dbg_trace s!"aSorts == sorts: {aSorts == sorts}";
---dbg_trace s!"bSorts == sorts: {bSorts == sorts}";
---dbg_trace s!"a': {a'}";
---dbg_trace s!"b': {b'}";
   e.tm.mkTerm! op #[a', b']
 
 def isNotEmpty (e: Env) (t : cvc5.Term) : Option cvc5.Term :=
