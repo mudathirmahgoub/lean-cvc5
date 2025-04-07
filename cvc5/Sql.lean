@@ -122,6 +122,8 @@ inductive Expr : Type where
 end
 
 
+
+
 inductive Constraint where
   | unique (name baseTable : String) (columns :List Nat) : Constraint
   | primaryKey  (name baseTable : String) (columns :List Nat) : Constraint
@@ -150,6 +152,30 @@ instance : ToString (List Expr) where
   toString arr :=
     "[" ++ String.intercalate ", " (arr.map (fun e => toString e)) ++ "]"
 
+
+
+instance : ToString BoolExpr where
+  toString x := reprStr x
+instance : ToString IntExpr where
+  toString x := reprStr x
+instance : ToString StringExpr where
+  toString x := reprStr x
+instance : ToString Query where
+  toString x := reprStr x
+instance : ToString SqlType where
+  toString x := reprStr x
+instance : ToString BaseTable where
+  toString x := reprStr x
+instance : ToString DatabaseSchema where
+  toString x := reprStr x
+instance : ToString QueryOp where
+  toString x := reprStr x
+instance : ToString Join where
+  toString x := reprStr x
+
+instance : ToString (List SqlType) where
+  toString arr :=
+    "[" ++ String.intercalate ", " (arr.map (fun e => toString e)) ++ "]"
 
 partial def columnsMatch (xs ys : List SqlType) : Bool :=
   match (xs, ys) with
@@ -229,8 +255,7 @@ partial def checkExpr (d : DatabaseSchema) (columns : List SqlType) (expr : Expr
 partial def checkBoolExpr (d : DatabaseSchema) (columns : List SqlType) (expr : BoolExpr) : Bool × SqlType :=
   match expr with
   | .column index =>
-    dbg_trace s!"Found {index}";
-    if index < columns.length then (false, .sqlType .boolean false)
+    if index >= columns.length then (false, .sqlType .boolean false)
     else match columns.get! index with
     | .sqlType .boolean x => (true, .sqlType .boolean x)
     | _ => (false, .sqlType .boolean false)
@@ -350,7 +375,7 @@ partial def checkBoolExpr (d : DatabaseSchema) (columns : List SqlType) (expr : 
 partial def checkIntExpr (d : DatabaseSchema) (columns : List SqlType) (expr : IntExpr) : Bool × SqlType :=
   match expr with
   | .column index =>
-    if index < columns.length then (false, .sqlType .integer false)
+    if index >= columns.length then (false, .sqlType .integer false)
     else match columns.get! index with
     | .sqlType .integer x => (true, .sqlType .integer x)
     | _ => (false, .sqlType .integer false)
@@ -386,7 +411,7 @@ partial def checkIntExpr (d : DatabaseSchema) (columns : List SqlType) (expr : I
 partial def checkStringExpr (d : DatabaseSchema) (columns : List SqlType) (expr : StringExpr) : Bool × SqlType :=
   match expr with
   | .column index =>
-    if index < columns.length then (false, .sqlType .text false)
+    if index >= columns.length then (false, .sqlType .text false)
     else match columns.get! index with
     | .sqlType .text x => (true, .sqlType .text x)
     | _ => (false, .sqlType .text false)
@@ -421,10 +446,10 @@ end
 def schema : DatabaseSchema :=
   { baseTables := [
       { name := "users", columns := [
-          .sqlType .integer true ,
+          .sqlType .integer false ,
           .sqlType .integer true ,
           .sqlType .text true ,
-          .sqlType .boolean true
+          .sqlType .boolean false
         ]
       },
       { name := "posts", columns := [
@@ -439,8 +464,13 @@ def schema : DatabaseSchema :=
   }
 
 
-def q1: Query := .filter (BoolExpr.column 3) (.baseTable "users")
-#eval checkQuery schema q1
+def q1 (index: Nat) : Query := .filter (BoolExpr.column index) (.baseTable "users")
+#eval checkQuery schema (q1 0)
+#eval checkQuery schema (q1 1)
+#eval checkQuery schema (q1 2)
+#eval checkQuery schema (q1 4)
+#eval checkQuery schema (q1 3)
+
 
 def q2: Query :=
   let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table1")
