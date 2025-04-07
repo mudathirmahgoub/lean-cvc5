@@ -15,8 +15,6 @@ structure Env where
   constraints: List cvc5.Term := []
 
 
-
-
 def mkEmptyTable (e: Env) (s: cvc5.Sort): cvc5.Term :=
   match e.semantics with
   | .bag => e.tm.mkEmptyBag! s -- (as bag.empty s)
@@ -140,7 +138,7 @@ def mkTableSort (e: Env) (tupleSort: cvc5.Sort) : cvc5.Sort :=
   |.set => e.tm.mkSetSort! tupleSort
 
 def declareTable (e: Env) (table: BaseTable) : Env :=
-  let sorts := table.columns.map (fun c => trSqlType e c.sqlType)
+  let sorts := table.columns.map (fun c => trSqlType e c)
   let tupleSort := e.tm.mkTupleSort! (sorts.filterMap id).toArray
   let tableSort := mkTableSort e tupleSort
   let tableTerm := e.s.declareFun table.name #[] tableSort
@@ -802,18 +800,18 @@ def test1 := do
 def schema : DatabaseSchema :=
   { baseTables := [
       { name := "users", columns := [
-          { index := 0, sqlType := .sqlType .integer true },
-          { index := 1, sqlType := .sqlType .integer true },
-          { index := 2, sqlType := .sqlType .text true },
-          { index := 3, sqlType := .sqlType .integer true }
+          .sqlType .integer true ,
+          .sqlType .integer true ,
+          .sqlType .text true ,
+          .sqlType .integer true
         ]
       },
       { name := "posts", columns := [
-          { index := 0, sqlType := .sqlType .integer false },
-          { index := 1, sqlType := .sqlType .integer false },
-          { index := 2, sqlType := .sqlType .text true },
-          { index := 3, sqlType := .sqlType .text true },
-          { index := 4, sqlType := .sqlType .integer true }
+          .sqlType .integer false ,
+          .sqlType .integer false ,
+          .sqlType .text true ,
+          .sqlType .text true ,
+          .sqlType .integer true
         ]
       }
     ]
@@ -1064,9 +1062,9 @@ def testExists (isBag : Bool) := do
 def schema2 : DatabaseSchema :=
   { baseTables := [
       { name := "users", columns := [
-          { index := 0, sqlType := SqlType.sqlType Basetype.boolean true },
-          { index := 1, sqlType := SqlType.sqlType Basetype.integer true },
-          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
+          .sqlType Basetype.boolean true ,
+          .sqlType Basetype.integer true ,
+          .sqlType Basetype.integer false
         ]
       }
     ]
@@ -1093,15 +1091,15 @@ def testCaseStatement  := do
 def schema3 : DatabaseSchema :=
   { baseTables := [
       { name := "users", columns := [
-          { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
-          { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
-          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
+         .sqlType Basetype.integer true ,
+         .sqlType Basetype.integer false ,
+         .sqlType Basetype.integer false
         ]
       },
       { name := "child", columns := [
-          { index := 0, sqlType := SqlType.sqlType Basetype.integer true },
-          { index := 1, sqlType := SqlType.sqlType Basetype.integer false },
-          { index := 2, sqlType := SqlType.sqlType Basetype.integer false }
+          SqlType.sqlType Basetype.integer true ,
+          SqlType.sqlType Basetype.integer false ,
+          SqlType.sqlType Basetype.integer false
         ]
       }
     ],
