@@ -51,6 +51,11 @@ def getUnionAllKind (e: Env) : cvc5.Kind :=
   | .bag => Kind.BAG_UNION_DISJOINT
   | .set => Kind.SET_UNION
 
+def getUnionMaxKind (e: Env) : cvc5.Kind :=
+  match e.semantics with
+  | .bag => Kind.BAG_UNION_MAX
+  | .set => Kind.SET_UNION
+
 def getMapKind (e: Env) : cvc5.Kind :=
   match e.semantics with
   | .bag => .BAG_MAP
@@ -498,7 +503,7 @@ partial def trProject (e: Env) (exprs: List Expr) (query: Query) : Option cvc5.T
 partial def trJoin (e: Env) (l: Query) (r: Query) (join: Join) (condition: BoolExpr) : Option cvc5.Term :=
   let l' := trQuery e l |>.get!
   let r' := trQuery e r |>.get!
-  let unionKind := getUnionAllKind e
+  let unionKind := getUnionMaxKind e
   let product := e.tm.mkTerm! (getProductKind e) #[l', r']
   let tupleSort := getTupleSort e product.getSort
   let t := e.tm.mkVar tupleSort "t" |>.toOption.get!
