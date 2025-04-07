@@ -121,6 +121,7 @@ inductive Expr : Type where
 
 end
 
+
 inductive Constraint where
   | unique (name baseTable : String) (columns :List Nat) : Constraint
   | primaryKey  (name baseTable : String) (columns :List Nat) : Constraint
@@ -147,7 +148,7 @@ instance : ToString Expr where
 
 instance : ToString (List Expr) where
   toString arr :=
-    "[" ++ String.intercalate ", " (arr.map toString) ++ "]"
+    "[" ++ String.intercalate ", " (arr.map (fun e => toString e)) ++ "]"
 
 
 partial def columnsMatch (xs ys : List SqlType) : Bool :=
@@ -187,23 +188,23 @@ partial def checkQuery (d : DatabaseSchema) (q : Query) : Bool × List SqlType :
   let (v, columns) := checkQuery d query
   if v == false then (false, [])
   else
-    let (v, t) := checkBoolExpr d columns condition
-    if v == false then (false, [])
+    let (v', _) := checkBoolExpr d columns condition
+    if v' == false then (false, [])
     else (true, columns)
-| .queryOperation op l r =>
+| .queryOperation _ l r =>
   let (v1, columns1) := checkQuery d l
   let (v2, columns2) := checkQuery d r
   if v1 == false || v2 == false then (false, [])
   else
     if columnsMatch columns1 columns2 then (true, liftTypes columns1 columns2)
     else (false, [])
-| .join l r join condition =>
+| .join l r _ condition =>
   let (v1, columns1) := checkQuery d l
   let (v2, columns2) := checkQuery d r
   if v1 == false || v2 == false then (false, [])
   else
     let columns := columns1 ++ columns2
-    let (v, t) := checkBoolExpr d columns condition
+    let (v, _) := checkBoolExpr d columns condition
     if v == false then (false, [])
     else (true, columns)
 | .values rows columns =>
@@ -228,6 +229,7 @@ partial def checkExpr (d : DatabaseSchema) (columns : List SqlType) (expr : Expr
 partial def checkBoolExpr (d : DatabaseSchema) (columns : List SqlType) (expr : BoolExpr) : Bool × SqlType :=
   match expr with
   | .column index =>
+    dbg_trace s!"Found {index}";
     if index < columns.length then (false, .sqlType .boolean false)
     else match columns.get! index with
     | .sqlType .boolean x => (true, .sqlType .boolean x)
@@ -238,35 +240,35 @@ partial def checkBoolExpr (d : DatabaseSchema) (columns : List SqlType) (expr : 
     let (v, _) := checkQuery d query
     (v, .sqlType .boolean false)
   | .case condition thenExpr elseExpr =>
-    let (v1, t1) := checkBoolExpr d columns condition
-    let (v2, t2) := checkBoolExpr d columns thenExpr
-    let (v3, t3) := checkBoolExpr d columns elseExpr
-    if v1 && v2 && v3 then (true, t2) -- fix this
+    let (v1, _) := checkBoolExpr d columns condition
+    let (v2, .sqlType _ b1) := checkBoolExpr d columns thenExpr
+    let (v3, .sqlType _ b2) := checkBoolExpr d columns elseExpr
+    if v1 && v2 && v3 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .stringEqual a b =>
-    let (v1, t1) := checkStringExpr d columns a
-    let (v2, t2) := checkStringExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .intEqual a b =>
-    let (v1, t1) := checkIntExpr d columns a
-    let (v2, t2) := checkIntExpr d columns b
-    if v1 && v2  then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2  then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .boolEqual a b =>
-    let (v1, t1) := checkBoolExpr d columns a
-    let (v2, t2) := checkBoolExpr d columns b
-    if v1 && v2  then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkBoolExpr d columns a
+    let (v2, .sqlType _ b2) := checkBoolExpr d columns b
+    if v1 && v2  then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .and a b =>
-    let (v1, t1) := checkBoolExpr d columns a
-    let (v2, t2) := checkBoolExpr d columns b
-    if v1 && v2 then (true, t1)
+    let (v1, .sqlType _ b1) := checkBoolExpr d columns a
+    let (v2, .sqlType _ b2) := checkBoolExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .or a b =>
-    let (v1, t1) := checkBoolExpr d columns a
-    let (v2, t2) := checkBoolExpr d columns b
-    if v1 && v2 then (true, t1)
+    let (v1, .sqlType _ b1) := checkBoolExpr d columns a
+    let (v2, .sqlType _ b2) := checkBoolExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .not a =>
     let (v, t) := checkBoolExpr d columns a
@@ -297,58 +299,156 @@ partial def checkBoolExpr (d : DatabaseSchema) (columns : List SqlType) (expr : 
     if v then (true, .sqlType .boolean false)
     else (false, .sqlType .boolean false)
   | .isTrue a =>
-    let (v, t) := checkBoolExpr d columns a
-    if v && t == .sqlType .boolean false then (true, t)
+    let (v, _) := checkBoolExpr d columns a
+    if v then (true, .sqlType .boolean false)
     else (false, .sqlType .boolean false)
   | .isNotTrue a =>
-    let (v, t) := checkBoolExpr d columns a
-    if v && t == .sqlType .boolean false then (true, t)
+    let (v, _) := checkBoolExpr d columns a
+    if v then (true, .sqlType .boolean false)
     else (false, .sqlType .boolean false)
   | .lsInt a b =>
-    let (v1, t1) := checkIntExpr d columns a
-    let (v2, t2) := checkIntExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .leqInt a b =>
-    let (v1, t1) := checkIntExpr d columns a
-    let (v2, t2) := checkIntExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .gtInt a b =>
-    let (v1, t1) := checkIntExpr d columns a
-    let (v2, t2) := checkIntExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .geqInt a b =>
-    let (v1, t1) := checkIntExpr d columns a
-    let (v2, t2) := checkIntExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .lsString a b =>
-    let (v1, t1) := checkStringExpr d columns a
-    let (v2, t2) := checkStringExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .leqString a b =>
-    let (v1, t1) := checkStringExpr d columns a
-    let (v2, t2) := checkStringExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .gtString a b =>
-    let (v1, t1) := checkStringExpr d columns a
-    let (v2, t2) := checkStringExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
   | .geqString a b =>
-    let (v1, t1) := checkStringExpr d columns a
-    let (v2, t2) := checkStringExpr d columns b
-    if v1 && v2 then (true, .sqlType .boolean false)
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .boolean (b1 || b2))
     else (false, .sqlType .boolean false)
 
 partial def checkIntExpr (d : DatabaseSchema) (columns : List SqlType) (expr : IntExpr) : Bool × SqlType :=
-  sorry
+  match expr with
+  | .column index =>
+    if index < columns.length then (false, .sqlType .integer false)
+    else match columns.get! index with
+    | .sqlType .integer x => (true, .sqlType .integer x)
+    | _ => (false, .sqlType .integer false)
+  | .literal _ => (true, .sqlType .integer false)
+  | .null => (true, .sqlType .integer true)
+  | .case condition thenExpr elseExpr =>
+    let (v1, _) := checkBoolExpr d columns condition
+    let (v2, .sqlType _ b1) := checkIntExpr d columns thenExpr
+    let (v3, .sqlType _ b2) := checkIntExpr d columns elseExpr
+    if v1 && v2 && v3 then (true, .sqlType .integer (b1 || b2))
+    else (false, .sqlType .integer false)
+  | .plus a b =>
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .integer (b1 || b2))
+    else (false, .sqlType .integer false)
+  | .minus a b =>
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .integer (b1 || b2))
+    else (false, .sqlType .integer false)
+  | .multiplication a b =>
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .integer (b1 || b2))
+    else (false, .sqlType .integer false)
+  | .division a b =>
+    let (v1, .sqlType _ b1) := checkIntExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .integer (b1 || b2))
+    else (false, .sqlType .integer false)
 
 partial def checkStringExpr (d : DatabaseSchema) (columns : List SqlType) (expr : StringExpr) : Bool × SqlType :=
-  sorry
+  match expr with
+  | .column index =>
+    if index < columns.length then (false, .sqlType .text false)
+    else match columns.get! index with
+    | .sqlType .text x => (true, .sqlType .text x)
+    | _ => (false, .sqlType .text false)
+  | .literal _ => (true, .sqlType .text false)
+  | .null => (true, .sqlType .text true)
+  | .case condition thenExpr elseExpr =>
+    let (v1, _) := checkBoolExpr d columns condition
+    let (v2, .sqlType _ b1) := checkStringExpr d columns thenExpr
+    let (v3, .sqlType _ b2) := checkStringExpr d columns elseExpr
+    if v1 && v2 && v3 then (true, .sqlType .text (b1 || b2))
+    else (false, .sqlType .text false)
+  | .upper a =>
+    let (v, .sqlType _ b1) := checkStringExpr d columns a
+    if v then (true, .sqlType .text b1)
+    else (false, .sqlType .text false)
+  | .lower a =>
+    let (v, .sqlType _ b1) := checkStringExpr d columns a
+    if v then (true, .sqlType .text b1)
+    else (false, .sqlType .text false)
+  | .concat a b =>
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkStringExpr d columns b
+    if v1 && v2 then (true, .sqlType .text (b1 || b2))
+    else (false, .sqlType .text false)
+  | .substring a _ _ =>
+    let (v, .sqlType _ b1) := checkStringExpr d columns a
+    if v then (true, .sqlType .text b1)
+    else (false, .sqlType .text false)
 
 end
+
+def schema : DatabaseSchema :=
+  { baseTables := [
+      { name := "users", columns := [
+          .sqlType .integer true ,
+          .sqlType .integer true ,
+          .sqlType .text true ,
+          .sqlType .boolean true
+        ]
+      },
+      { name := "posts", columns := [
+          .sqlType .integer false ,
+          .sqlType .integer false ,
+          .sqlType .text true ,
+          .sqlType .text true ,
+          .sqlType .integer true
+        ]
+      }
+    ]
+  }
+
+
+def q1: Query := .filter (BoolExpr.column 3) (.baseTable "users")
+#eval checkQuery schema q1
+
+def q2: Query :=
+  let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table1")
+  let filter := .filter (.lsInt (.column 1) (.literal 25)) project
+  filter
+
+def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
+
+def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)],
+                           [.boolExpr (.null), .intExpr (.null), .stringExpr (.null)]]
+                          [.sqlType .boolean true, .sqlType .integer true, .sqlType .text true ]
