@@ -776,12 +776,19 @@ def trSchema (e: Env) (d: DatabaseSchema) : Env :=
 
 
 def equivalenceFormula (e: Env) (d: DatabaseSchema) (q1 q2: Query) : cvc5.Term :=
-  let e' := trSchema e d
-  let q1' := trQuery e' q1 |>.get!
-  let q2' := trQuery e' q2 |>.get!
-  let formula := mkQueryOp e .DISTINCT q1' q2'
-  dbg_trace s!"(assert {formula})";
-  formula
+  let q : Query := .queryOperation .unionAll
+     (.queryOperation .exceptAll q1 q2)
+     (.queryOperation .exceptAll q2 q1)
+  let (checks, _) := checkQuery d q
+  if checks then
+    let e' := trSchema e d
+    let q1' := trQuery e' q1 |>.get!
+    let q2' := trQuery e' q2 |>.get!
+    let formula := mkQueryOp e .DISTINCT q1' q2'
+    dbg_trace s!"(assert {formula})";
+    formula
+  else
+    panic! "Invalid queries"
 
 
 def test1 := do
