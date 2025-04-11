@@ -376,8 +376,16 @@ def trPrimary (e: Env) (name baseTable: String) (columns : List Nat) : cvc5.Term
   let xNotNull := e.tm.mkTerm! .LAMBDA #[xList, notNull]
   let xAllNotNull := e.tm.mkTerm! (getAllKind e) #[xNotNull, table]
   let and := xAllNotNull.and! xAll
-  dbg_trace s!"(assert {and})";
-  and
+  let assertion := match e.semantics with
+    | .bag =>
+      let one := e.tm.mkInteger 1
+      let equalOne := e.tm.mkTerm! .EQUAL #[one, e.tm.mkTerm! .BAG_COUNT #[x, table]]
+      let lambda := e.tm.mkTerm! .LAMBDA #[xList, equalOne]
+      let xAll2 := e.tm.mkTerm! (getAllKind e) #[lambda, table]
+      and.and! xAll2
+    | .set => and
+  dbg_trace s!"(assert {assertion})";
+  assertion
 
 def trForeign (e : Env) (name child parent : String) (childColumns parentColumns :List Nat): cvc5.Term :=
   dbg_trace s!";; {name}";
