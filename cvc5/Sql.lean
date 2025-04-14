@@ -443,7 +443,7 @@ partial def checkStringExpr (d : DatabaseSchema) (columns : List SqlType) (expr 
 
 end
 
-def schema : DatabaseSchema :=
+def s : DatabaseSchema :=
   { baseTables := [
       { name := "users", columns := [
           .sqlType .integer false ,
@@ -465,11 +465,11 @@ def schema : DatabaseSchema :=
 
 
 def q1 (index: Nat) : Query := .filter (BoolExpr.column index) (.baseTable "users")
-#eval checkQuery schema (q1 0)
-#eval checkQuery schema (q1 1)
-#eval checkQuery schema (q1 2)
-#eval checkQuery schema (q1 4)
-#eval checkQuery schema (q1 3)
+#eval checkQuery s (q1 0)
+#eval checkQuery s (q1 1)
+#eval checkQuery s (q1 2)
+#eval checkQuery s (q1 4)
+#eval checkQuery s (q1 3)
 
 
 def q2: Query :=

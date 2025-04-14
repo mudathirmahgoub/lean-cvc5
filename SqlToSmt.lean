@@ -1136,6 +1136,20 @@ def testConstraints  := do
 
 #eval testConstraints
 
-#check Int
-#check String
-#check Array Type
+
+def schema4 : DatabaseSchema :=
+  { baseTables := [{ name := "s", columns := [ .sqlType Basetype.integer true ] }],
+    constraints := [.primaryKey "pk" "s" [0]]
+  }
+
+def testFilterExample  := do
+  let tm ← TermManager.new
+  let s := (Solver.new tm)
+  let s2 ← s.setOption "dag-thresh" "0"
+  let e: Env := {tm:= tm, s := s2.snd, semantics := .bag, n:= none}
+  let e' := trSchema e schema4
+  let t : Query := .filter (.leqInt (.column 0) (.literal 5)) (.baseTable "s")
+  let w := trQuery e' t
+  return w.get!
+
+#eval testFilterExample
