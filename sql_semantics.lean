@@ -408,9 +408,20 @@ partial def semanticsStringExpr (s : SQLSemantics) (d: DatabaseInstance) (expr: 
     | none, _ => none
     | _, none => none
     | some c, some d => c.append d
- | .substring a start length =>
-    match semanticsStringExpr s d a x with
-    | some str => Substring.mk str (String.Pos.mk (start - 1)) (String.Pos.mk length) |>.toString
+ | .substring2 a b =>
+ let a' := semanticsStringExpr s d a x
+ let b' := semanticsIntExpr s d b x
+ match (a', b') with
+    | (some str, some i) =>
+      Substring.mk str (String.Pos.mk ((i - 1).toNat)) (String.Pos.mk (String.length str)) |>.toString
+    | _ => none
+ | .substring3 a b c=>
+ let a' := semanticsStringExpr s d a x
+ let b' := semanticsIntExpr s d b x
+ let c' := semanticsIntExpr s d c x
+ match (a', b', c') with
+    | (some str, some i, some j) =>
+      Substring.mk str (String.Pos.mk ((i - 1).toNat)) (String.Pos.mk j.toNat) |>.toString
     | _ => none
  | .case c t e =>
     let c' := semanticsBoolExpr s d c
@@ -512,26 +523,26 @@ def d: DatabaseInstance := (HashMap.empty.insert "table1" table1).insert "table2
 
 #eval d
 
-def q1: Query := .filter (BoolExpr.column 0) (.baseTable "table1")
-def q2: Query :=
+def q1': Query := .filter (BoolExpr.column 0) (.baseTable "table1")
+def q2': Query :=
   let project := .project [.stringExpr (.upper (.column 2)), .intExpr (.multiplication (.column 1) (.literal 2))] (.baseTable "table1")
   let filter := .filter (.lsInt (.column 1) (.literal 25)) project
   filter
 
-def q3 : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
+def q3' : Query := .join (.baseTable "table1") (.baseTable "table2") .full (.intEqual (.column 1) (.column 4))
 
-def q4 : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)],
+def q4' : Query := .values [[.boolExpr (.null), .intExpr (.null), .stringExpr (.null)],
                            [.boolExpr (.null), .intExpr (.null), .stringExpr (.null)]]
                           [.sqlType .boolean true, .sqlType .integer true, .sqlType .text true ]
 
-#eval semantics .bag d q1
-#eval semantics .bag d q2
-#eval semantics .bag d q3
-#eval semantics .bag d q4
-#eval semantics .set d q4
+#eval semantics .bag d q1'
+#eval semantics .bag d q2'
+#eval semantics .bag d q3'
+#eval semantics .bag d q4'
+#eval semantics .set d q4'
 
 
 def q:Query :=
   .queryOperation .unionAll
-    (.queryOperation .exceptAll q1 q2)
-    (.queryOperation .exceptAll q1 q2)
+    (.queryOperation .exceptAll q1' q2)
+    (.queryOperation .exceptAll q1' q2)
