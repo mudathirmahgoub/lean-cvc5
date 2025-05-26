@@ -69,7 +69,8 @@ inductive StringExpr : Type where
   | upper (a : StringExpr) : StringExpr
   | lower (a : StringExpr) : StringExpr
   | concat (a b : StringExpr) : StringExpr
-  | substring (a : StringExpr) (start length : Nat) : StringExpr
+  | substring2 (a : StringExpr) (start : IntExpr) : StringExpr
+  | substring3 (a : StringExpr) (start length : IntExpr) : StringExpr
   deriving Repr
 
 inductive IntExpr : Type where
@@ -436,9 +437,16 @@ partial def checkStringExpr (d : DatabaseSchema) (columns : List SqlType) (expr 
     let (v2, .sqlType _ b2) := checkStringExpr d columns b
     if v1 && v2 then (true, .sqlType .text (b1 || b2))
     else (false, .sqlType .text false)
-  | .substring a _ _ =>
-    let (v, .sqlType _ b1) := checkStringExpr d columns a
-    if v then (true, .sqlType .text b1)
+  | .substring2 a b =>
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    if v1 && v2 then (true, .sqlType .text (b1 || b2))
+    else (false, .sqlType .text false)
+  | .substring3 a b c =>
+    let (v1, .sqlType _ b1) := checkStringExpr d columns a
+    let (v2, .sqlType _ b2) := checkIntExpr d columns b
+    let (v3, .sqlType _ b3) := checkIntExpr d columns c
+    if v1 && v2 && v3 then (true, .sqlType .text (b1 || b2 || b3))
     else (false, .sqlType .text false)
 
 end
